@@ -807,7 +807,7 @@ function retentionOf(dir) {
 function renderStats() {
   const v = $("#view-stats");
   const mastered = S.cards.filter(c => c.interval >= MASTERED && c.p.interval >= MASTERED).length;
-  const goal = 1000;
+  const goal = S.cards.length; // the goal follows the deck: it grows when new cards are added
   const learning = S.cards.filter(c => c.introduced).length - mastered;
   const streak = streakNow();
   // last 14 days
