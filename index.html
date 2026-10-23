@@ -126,7 +126,7 @@ nav.tabs {
   padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px));
   padding-top: 6px; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
 }
-nav.tabs .in { max-width: 540px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+nav.tabs .in { max-width: 540px; margin: 0 auto; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
 nav.tabs button { border: 0; background: none; color: var(--muted); padding: 8px 4px; font-size: 0.82rem; border-radius: 10px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 nav.tabs button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.6; }
 nav.tabs button[aria-current="page"] { color: var(--accent); }
@@ -165,7 +165,8 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
 .goalbar i { transition: width 0.4s ease; }
 .goal.won .label { color: var(--good); }
 .goal.won .goalbar i { background: var(--good); }
-.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.goal-note { margin: 0; font-size: 0.82rem; }
+.help { font-size: 0.8rem; font-weight: 400; }
 .chip { font-size: 0.8rem; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; background: var(--surface); white-space: nowrap; }
 .fx { position: fixed; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translate(-50%, -12px); opacity: 0; pointer-events: none; z-index: 20;
   background: var(--accent); color: var(--surface); border-radius: 999px; padding: 8px 16px; font-weight: 600; font-size: 0.95rem; text-align: center;
@@ -214,12 +215,6 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   <section id="view-stats" data-view hidden></section>
 
   <!-- LIBRARY -->
-  <section id="view-library" data-view hidden>
-    <div class="panel">
-      <div class="field"><label for="search">Search your cards</label><input id="search" type="search" placeholder="Type a word in English or French" autocomplete="off"></div>
-      <div class="list" id="list"></div>
-    </div>
-  </section>
 </div>
 
 <div id="fx" class="fx" role="status" aria-live="polite"></div>
@@ -228,7 +223,6 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   <div class="in">
     <button data-tab="review" aria-current="page"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10h8M8 14h5"/></svg>Review</button>
     <button data-tab="stats"><svg viewBox="0 0 24 24"><path d="M5 19V11M12 19V5M19 19v-6"/></svg>Progress</button>
-    <button data-tab="library"><svg viewBox="0 0 24 24"><path d="M5 5h4v14H5zM10 5h4v14h-4zM15 6l3.5-.8 3 13.6-3.5.8z"/></svg>Cards</button>
   </div>
 </nav>
 
@@ -397,28 +391,6 @@ const HARD = 2;      // a side you missed twice or more shows up in "Hardest car
 const LEECH = 4;     // missed four times or more: flagged as a leech
 
 // ---------- Game layer ----------
-// XP rewards showing up and real memory, never the grade you give yourself:
-// 10 XP per card whatever the grade, +5 when a "Say it" answer is exactly right,
-// +50 when a side reaches 3 weeks, +100 when the whole expression is mastered,
-// +50 for reaching the daily goal, and double XP in the bonus round after it.
-const LEVELS = [[0, "Intern"], [300, "Junior Analyst"], [1000, "Analyst"], [2500, "Associate"], [5000, "Consultant"],
-  [10000, "Senior Consultant"], [18000, "Manager"], [30000, "Senior Manager"], [50000, "Director"], [80000, "Partner"]];
-function levelOf(xp) {
-  let i = 0; while (i + 1 < LEVELS.length && xp >= LEVELS[i + 1][0]) i++;
-  const [from, name] = LEVELS[i], to = LEVELS[i + 1] ? LEVELS[i + 1][0] : null;
-  return { n: i + 1, name, from, to, next: LEVELS[i + 1] ? LEVELS[i + 1][1] : null, pct: to ? (xp - from) / (to - from) : 1 };
-}
-const BADGES = [
-  ["first", "First step", "Review your first card"],
-  ["day1", "Day won", "Reach your daily goal"],
-  ["say1", "First words", "Type a Say it card exactly right"],
-  ["streak7", "One week", "7 days in a row"],
-  ["m10", "Ten down", "Master 10 expressions"],
-  ["chapter", "Chapter closed", "Master every card of one theme"],
-  ["streak30", "One month", "30 days in a row"],
-  ["m50", "Fifty down", "Master 50 expressions"],
-  ["all", "Deck complete", "Master every expression"],
-];
 const isMastered = c => c.interval >= MASTERED && c.p.interval >= MASTERED;
 const masteredCount = () => S.cards.filter(isMastered).length;
 function doneToday() { const s = dayStart(); return new Set(S.log.filter(l => l.t >= s && !l.practice).map(l => l.id + "|" + (l.dir || "r"))).size; }
@@ -455,26 +427,6 @@ function confetti() {
     box.appendChild(e); setTimeout(() => e.remove(), 2200);
   }
 }
-function addXp(n, why) {
-  const before = levelOf(S.xp);
-  S.xp += n; S.xpDay[dayKey()] = (S.xpDay[dayKey()] || 0) + n;
-  const after = levelOf(S.xp);
-  toast(`+${n} XP${why ? ` <span>${why}</span>` : ""}`);
-  if (after.n > before.n) { toast(`Level up<br><b>${after.name}</b>`, true); confetti(); }
-}
-function award(id) {
-  if (S.badges[id]) return;
-  S.badges[id] = Date.now();
-  const b = BADGES.find(x => x[0] === id);
-  toast(`Badge unlocked<br><b>${b[1]}</b>`, true);
-}
-function checkBadges() {
-  if (S.log.some(l => !l.practice)) award("first");
-  if (Object.values(S.goal).some(g => g.won)) award("day1");
-  const st = streakNow(); if (st >= 7) award("streak7"); if (st >= 30) award("streak30");
-  const m = masteredCount(); if (m >= 10) award("m10"); if (m >= 50) award("m50"); if (m >= S.cards.length) award("all");
-  if (chapters().some(c => c.mastered === c.total)) award("chapter");
-}
 let S;
 function blank() { return { introduced: null, due: 0, interval: 0, ease: 2.3, reps: 0, lapses: 0 }; }
 function makeCard(d, i) { return { id: "d" + (i + 1), en: d[0], fr: d[1], ex: d[2], tag: d[3], ...blank(), p: blank() }; }
@@ -486,8 +438,7 @@ function normalize() {
   S.settings = Object.assign({ newPerDay: 10, reviewCap: 80 }, S.settings || {});
   S.intro = S.intro || {}; S.introP = S.introP || {}; S.log = S.log || [];
   S.cards.forEach(c => { if (!c.p) c.p = blank(); });
-  if (typeof S.xp !== "number") S.xp = 10 * S.log.filter(l => !l.practice).length;
-  S.xpDay = S.xpDay || {}; S.goal = S.goal || {}; S.badges = S.badges || {};
+  S.goal = S.goal || {};
 }
 let merged = 0;
 function load() {
@@ -594,7 +545,6 @@ function grade(g) {
   const s = side(c, dir);
   if (practice) {
     S.log.push({ t: Date.now(), id: c.id, dir, g, practice: true });
-    addXp(5, "practice");
   } else {
     const fullBefore = isMastered(c);
     const wasNew = !s.introduced;
@@ -604,18 +554,11 @@ function grade(g) {
     Object.assign(s, nextState(s, g, elapsed));
     s.due = dayStart() + s.interval * DAY;
     S.log.push({ t: Date.now(), id: c.id, dir, g, wasNew, before, after: s.interval });
+    if (!fullBefore && isMastered(c)) toast(`Expression mastered<br><b>${esc(c.en)}</b>`, true);
     const goal = S.goal[dayKey()];
-    const bonus = goal && goal.won;
-    let xp = 10, why = "";
-    if (dir === "p" && verdict && verdict.g === 2 && verdict.cls === "good") { xp += 5; why = "exact"; award("say1"); }
-    if (before < MASTERED && s.interval >= MASTERED) { xp += 50; why = "3 weeks reached"; }
-    if (!fullBefore && isMastered(c)) { xp += 100; why = "expression mastered"; }
-    if (bonus) { xp *= 2; why = why ? why + " · ×2" : "bonus ×2"; }
-    addXp(xp, why);
     if (goal && !goal.won && doneToday() >= goal.target) {
-      goal.won = true; addXp(50, "daily goal"); toast("Daily goal reached<br><b>Day won</b>", true); confetti();
+      goal.won = true; toast("Daily goal reached<br><b>Day won</b>", true); confetti();
     }
-    checkBadges();
   }
   queue.shift();
   if (g === 0) queue.splice(Math.min(3, queue.length), 0, current); // see it again a few cards later
@@ -674,7 +617,7 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 
 function renderStrip() {
-  const g = S.goal[dayKey()], d = doneToday(), lv = levelOf(S.xp), st = streakNow();
+  const g = S.goal[dayKey()], d = doneToday(), st = streakNow();
   const target = g ? g.target : 0, won = g && g.won;
   const pct = target ? Math.min(1, d / target) : (d ? 1 : 0);
   $("#strip").innerHTML = `
@@ -683,11 +626,7 @@ function renderStrip() {
         <span class="goal-n"><b>${Math.min(d, target)}</b> / ${target}${d > target ? ` <span class="bonus">+${d - target} bonus</span>` : ""}</span></div>
       <div class="bar goalbar"><i style="width:${pct * 100}%"></i></div>
     </div>
-    <div class="chips">
-      <span class="chip"><b>Lv ${lv.n}</b> ${lv.name}</span>
-      <span class="chip" title="Days in a row">🔥 <b>${st}</b></span>
-      <span class="chip"><b>${S.xp.toLocaleString("en")}</b> XP</span>
-    </div>`;
+    <p class="muted goal-note">${won ? "Anything more today is bonus." : `Today's reviews plus ${S.settings.newPerDay} new cards (change it in Progress → Settings).`} ${st ? `${st}-day streak.` : ""}</p>`;
 }
 function renderCounts() {
   renderStrip();
@@ -709,26 +648,22 @@ function renderReview() {
       return;
     }
     const tomorrow = S.cards.reduce((n, c) => n + (c.introduced && c.due < dayStart() + 2 * DAY ? 1 : 0) + (c.p.introduced && c.p.due < dayStart() + 2 * DAY ? 1 : 0), 0);
-    const k = dayKey(), g = S.goal[k], won = g && g.won, lv = levelOf(S.xp);
+    const k = dayKey(), g = S.goal[k], won = g && g.won;
     const t0 = dayStart(), today = S.log.filter(l => l.t >= t0 && !l.practice);
     const met = today.filter(l => l.wasNew).length;
     const levelUp = today.filter(l => l.before < MASTERED && l.after >= MASTERED).length;
     v.innerHTML = `<div class="panel done ${won ? "won" : ""}">
       <div class="big">${won ? "Day won" : "All clear"}</div>
-      <p class="muted" style="margin:0">${won ? "Daily goal reached. Everything from here is bonus, with double XP." : "Nothing left to review right now."}</p>
+      <p class="muted" style="margin:0">${won ? "Daily goal reached. Everything from here is bonus." : "Nothing left to review right now."}</p>
       <div class="tiles recap">
         <div class="tile"><span class="v">${doneToday()}</span><span class="label">cards today</span></div>
         <div class="tile"><span class="v">${met}</span><span class="label">new sides met</span></div>
-        <div class="tile"><span class="v">${S.xpDay[k] || 0}</span><span class="label">XP today</span></div>
+        <div class="tile"><span class="v">${masteredCount()}</span><span class="label">mastered</span></div>
       </div>
       ${levelUp ? `<p style="margin:0">${levelUp} side${levelUp > 1 ? "s" : ""} reached the 3-week mark today.</p>` : ""}
-      <div class="lvl">
-        <div class="goal-top"><span><b>Lv ${lv.n}</b> · ${lv.name}</span><span class="muted">${lv.to ? `${(lv.to - S.xp).toLocaleString("en")} XP to ${lv.next}` : "Top level"}</span></div>
-        <div class="bar"><i style="width:${lv.pct * 100}%"></i></div>
-      </div>
-      <p class="muted" style="margin:0;font-size:.9rem">${tomorrow} card${tomorrow === 1 ? "" : "s"} due tomorrow. Come back to keep your 🔥 ${streakNow()}-day streak.</p>
+      <p class="muted" style="margin:0;font-size:.9rem">${tomorrow} card${tomorrow === 1 ? "" : "s"} due tomorrow. ${streakNow() > 1 ? `Come back to keep your ${streakNow()}-day streak.` : "See you tomorrow."}</p>
       ${backlog ? `<p class="muted" style="margin:0">${backlog} older review${backlog > 1 ? "s" : ""} will wait for tomorrow, so the daily load stays light.</p>` :
-      `<button class="primary" id="moreNew" type="button">Bonus round · 5 new cards${won ? " · double XP" : ""}</button>`}
+      `<button class="primary" id="moreNew" type="button">Bonus round · 5 more new cards</button>`}
     </div>`;
     if (!backlog) $("#moreNew").onclick = () => { S.settings.newPerDay += 5; buildQueue(); S.settings.newPerDay -= 5; next(); renderReview(); };
     return;
@@ -825,35 +760,21 @@ function renderStats() {
         (i % 2 === 1 ? `<text x="${x + (bw - 4) / 2}" y="${H + 13}" text-anchor="middle">${new Date(b.s).getDate()}</text>` : ""); }).join("")}
   </svg>`;
   const hard = hardest();
-  const lv = levelOf(S.xp);
-  const ladder = LEVELS.map(([x, name], i) => `<li class="${i + 1 < lv.n ? "past" : i + 1 === lv.n ? "now" : ""}"><span>${name}</span><span class="muted">${x.toLocaleString("en")} XP</span></li>`).join("");
   const chaps = chapters().map(ch => `<div class="chap">
       <div class="goal-top"><span><b>${esc(ch.tag)}</b>${ch.mastered === ch.total ? " · closed" : ""}</span><span class="muted">${ch.mastered} mastered · ${ch.seen} started / ${ch.total}</span></div>
       <div class="bar two"><i class="seen" style="width:${100 * ch.seen / ch.total}%"></i><i style="width:${100 * ch.mastered / ch.total}%"></i></div>
     </div>`).join("");
-  const badges = BADGES.map(([id, name, how]) => `<div class="badge ${S.badges[id] ? "on" : ""}"><span class="medal">${S.badges[id] ? "★" : "☆"}</span><b>${name}</b><span class="muted">${how}</span></div>`).join("");
   v.innerHTML = `
-  <div class="panel kpi">
-    <span class="label">Your level</span>
-    <div class="num">Lv ${lv.n} <span>${lv.name}</span></div>
-    <div class="bar"><i style="width:${lv.pct * 100}%"></i></div>
-    <span class="muted" style="font-size:.85rem">${S.xp.toLocaleString("en")} XP${lv.to ? ` · ${(lv.to - S.xp).toLocaleString("en")} to ${lv.next}` : ""}. XP comes from showing up and from real memory, never from the grade you give yourself.</span>
-    <ol class="ladder">${ladder}</ol>
-  </div>
   <div class="panel">
     <h2>Chapters</h2>
-    <p class="muted" style="margin:0;font-size:.85rem">Close a chapter by mastering all its cards. Light bar: started. Dark bar: mastered.</p>
+    <p class="muted" style="margin:0;font-size:.85rem">One chapter per theme. Light bar: cards started. Dark bar: cards mastered. A chapter is closed when all its cards are mastered.</p>
     ${chaps}
   </div>
-  <div class="panel">
-    <h2>Badges <span class="muted" style="font-size:1rem">${Object.keys(S.badges).length} / ${BADGES.length}</span></h2>
-    <div class="badges">${badges}</div>
-  </div>
   <div class="panel kpi">
-    <span class="label">Goal before May 2027</span>
+    <span class="label">Mastered expressions</span>
     <div class="num">${mastered} <span>/ ${goal} expressions mastered</span></div>
     <div class="bar"><i style="width:${Math.min(100, (mastered / goal) * 100)}%"></i></div>
-    <span class="muted" style="font-size:.85rem">An expression is mastered when you can still understand it <em>and</em> say it three weeks after your last review. ${learning} in progress.</span>
+    <span class="muted" style="font-size:.85rem">Mastered = you still understand it <em>and</em> can say it three weeks after your last review. So the first ones show up about four weeks after you start. ${learning} in progress.</span>
   </div>
   <div class="panel">
     <div class="tiles">
@@ -865,19 +786,20 @@ function renderStats() {
   </div>
   <div class="panel">
     <h2>Hardest cards</h2>
+    <p class="muted" style="margin:0;font-size:.85rem">Cards you answered <em>Again</em> twice or more. Drill them here.</p>
     ${hard.length ? `<div class="list">${hard.slice(0, 8).map(x => `<div class="item"><span class="en">${esc(x.c.en)}</span><span class="fr2">${esc(x.c.fr)}</span>
       <span class="st"><span class="pill ${x.s.lapses >= LEECH ? "leechpill" : "learning"}">${DIRS[x.dir]} · missed ${x.s.lapses}×</span></span></div>`).join("")}</div>
       <button class="primary" id="practiceBtn" type="button">Practice these now</button>
       <p class="muted" style="margin:0;font-size:.85rem">Practice does not change your schedule. If a card stays here for weeks, rewrite its example sentence with your own words.</p>`
-      : `<p class="muted" style="margin:0">Nothing yet. Cards you miss twice or more show up here, so you can drill them.</p>`}
+      : `<p class="muted" style="margin:0">Nothing yet.</p>`}
   </div>
   <div class="panel">
     <h2>Settings and backup</h2>
-    <div class="field"><label for="npd">New cards per day (each side)</label>
+    <div class="field"><label for="npd">New cards per day</label><span class="muted help">Sets your daily goal. More = faster progress, but more reviews in the following days.</span>
       <select id="npd">${[5, 10, 15, 20, 30].map(n => `<option ${n === S.settings.newPerDay ? "selected" : ""}>${n}</option>`).join("")}</select></div>
-    <div class="field"><label for="cap">Maximum reviews per day</label>
+    <div class="field"><label for="cap">Maximum reviews per day</label><span class="muted help">A ceiling, so a few missed days never turn into a mountain.</span>
       <select id="cap">${[40, 60, 80, 120, 200].map(n => `<option ${n === S.settings.reviewCap ? "selected" : ""}>${n}</option>`).join("")}</select></div>
-    <p class="muted" style="margin:0;font-size:.9rem">Your cards are saved on this device only. Copy a backup now and then, and use the review log for analysis in Python.</p>
+    <p class="muted" style="margin:0;font-size:.9rem">Your progress lives in this browser only. A backup is a copy of it: keep one before changing phone or clearing Safari, then use Restore to get everything back.</p>
     <div class="row">
       <button class="small" id="expJson" type="button">Backup (JSON)</button>
       <button class="small" id="expCsv" type="button">Review log (CSV)</button>
@@ -919,24 +841,6 @@ function renderStats() {
   };
 }
 
-function sideStatus(c, dir) {
-  const s = side(c, dir);
-  if (!s.introduced) return [dir === "p" && !unlocked(c) ? "locked" : "new", ""];
-  if (s.interval >= MASTERED) return ["mastered", "mastered"];
-  return ["in " + fmtInterval(Math.max(0, Math.round((s.due - dayStart()) / DAY))), s.lapses >= LEECH ? "leechpill" : "learning"];
-}
-function renderLibrary() {
-  const q = $("#search").value.trim().toLowerCase();
-  const items = S.cards.filter(c => !q || (c.en + " " + c.fr).toLowerCase().includes(q));
-  $("#list").innerHTML = items.length ? items.map(c => {
-    const pills = ["r", "p"].map(dir => { const [t, cls] = sideStatus(c, dir); return `<span class="pill ${cls}">${DIRS[dir]} ${t}</span>`; }).join("");
-    return `<div class="item"><span class="en">${esc(c.en)}</span><span class="fr2">${esc(c.fr)}</span>
-      <span class="st">${pills}</span></div>`;
-  }).join("") : `<p class="muted">No card matches “${esc(q)}”.</p>`;
-}
-
-$("#search").oninput = renderLibrary;
-
 // ---------- Tabs ----------
 function go(tab) {
   document.querySelectorAll("[data-view]").forEach(s => s.hidden = s.id !== "view-" + tab);
@@ -944,7 +848,6 @@ function go(tab) {
   renderStrip();
   if (tab === "review") { if (!current && !practiceDone) { buildQueue(); next(); } renderReview(); }
   if (tab === "stats") renderStats();
-  if (tab === "library") renderLibrary();
   window.scrollTo(0, 0);
 }
 document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => go(b.dataset.tab));

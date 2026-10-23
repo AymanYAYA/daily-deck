@@ -18,11 +18,10 @@ How the learning logic works:
 - **Missed days don't snowball.** Reviews are capped per day (80 by default), the most urgent cards come first (how late a card is compared with its gap), and new cards pause until you catch up.
 - **Hardest cards.** Cards you miss twice or more are listed in the Progress tab, and you can drill them in a practice mode that doesn't disturb the schedule.
 
-### Game layer
-- **Daily goal:** the day's reviews plus new cards, fixed at your first visit. Reach it and the day is won; everything after is a bonus round with double XP.
-- **XP and levels:** a consulting career ladder, from *Intern* to *Partner*. XP rewards showing up and real memory (10 XP per card whatever the grade, a bonus for exact *Say it* answers, big bonuses when a card reaches 3 weeks or an expression is mastered), never the grade you give yourself, so there's no reason to cheat.
-- **Chapters and badges:** each theme is a chapter you close by mastering all its cards; badges mark milestones (first day won, 7-day streak, 50 mastered…).
-- **Session recap:** cards done, new cards met, XP earned and distance to the next level.
+### Motivation
+- **Daily goal:** the day's reviews plus your new cards, fixed at your first visit. Reach it and the day is won; anything after is a bonus round.
+- **Chapters:** each theme is a chapter you close by mastering all its cards.
+- **Session recap:** cards done, new cards met, expressions mastered.
 
 An expression counts as **mastered** when you can still understand it *and* say it three weeks after your last review.
 
