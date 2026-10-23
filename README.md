@@ -1,44 +1,39 @@
 # Daily Deck
 
-A small spaced-repetition flashcard app (Anki-style) to build professional English, one short session a day.
+A small spaced-repetition flashcard app (Anki-style) to build English, one short session a day.
 
 **Try it:** https://aymanyaya.github.io/daily-deck/
 
 ## Problem
-Moving from French to English at work: interviews, case studies, client meetings, emails. Generic vocabulary apps don't cover the phrases I actually need, and most flashcard apps only train you to *understand* a word, not to *say* it when you need it.
+Moving from French to English at work. Generic vocabulary apps don't target what I actually need, and most flashcard apps only train you to *recognise* a word, not to *produce* it when you need it. I also wanted to stay in control: choose what I train, and understand exactly how each card is graded.
 
 ## Method
-Cards (English phrase, French meaning, example sentence) organised as a **pyramid of 5 levels**, from the English you use most to the most specialised:
+**Decks you choose.** Each deck is a separate topic with its own progress:
 
-| Level | Content | Cards |
+| Deck | What you do | Cards |
 |---|---|---|
-| 1. Intern | The core of everyday conversation: small talk, questions, opinions, reactions, time & plans, connectors, everyday verbs | 149 |
-| 2. Analyst | Workplace basics: meetings, emails | 40 |
-| 3. Consultant | Interviews, case studies, consulting | 60 |
-| 4. Manager | Convince and negotiate | coming soon |
-| 5. Partner | Finance and tech vocabulary | 50 |
+| Verbs | The French verb is shown, you type the English (*partir → to leave*) | 150 most used English verbs |
+| Expressions | Everyday and work expressions, both ways | 299 |
 
-New cards come from your current level, chapter by chapter. A card is *solid* when you remember it a week later both ways; a level closes when all its cards are solid, and earlier levels keep coming back in reviews, so the base is never lost.
+**Graded by the app, not by you.** You type your answer; the app grades it:
 
-**Verification:** every card links to Reverso Context to see the phrase in real sentences translated by people, and doubtful cards can be flagged and exported for correction. Card text always comes from the deck, so a corrected card is fixed for everyone without losing progress.
+| Grade | Meaning | Comes back |
+|---|---|---|
+| Easy | Found on your own | after a long gap |
+| Good | Found with the hint (first letter of each word) | after a medium gap |
+| Hard | Almost: one typo or a missing word | soon |
+| Again | Wrong, or "I give up" | tomorrow, and again a few cards later |
 
-How the learning logic works:
+**Spaced repetition (SM-2, the algorithm behind Anki).** Cards you know come back after longer and longer gaps (1 day, 3 days, a week, three weeks…). Coming back late but still remembering earns credit for the extra time. Reviews are capped per day and the most urgent come first, so missed days never snowball.
 
-- **Two sides per card, scheduled separately.** *Understand it* (English → French) comes first. Once you know a card with a 3-day gap, *Say it* (French → English) unlocks, because producing a phrase is harder than recognising it.
-- **Answer before you see.** On *Say it* cards you type your answer, with an optional hint (first letter of each word). The app compares it with the expected phrase, underlines the missing words and suggests a grade, so you can't fool yourself.
-- **Spaced repetition (SM-2, the algorithm behind Anki).** Each review is graded *Again / Hard / Good / Easy*. Remembered cards come back after longer and longer gaps (1 day, 3 days, a week, three weeks…); forgotten cards start again at 1 day and reappear a few cards later in the same session. If you come back late and still remember, the card gets credit for the extra time.
-- **Missed days don't snowball.** Reviews are capped per day (80 by default), the most urgent cards come first (how late a card is compared with its gap), and new cards pause until you catch up.
-- **Hardest cards.** Cards you miss twice or more are listed in the Progress tab, and you can drill them in a practice mode that doesn't disturb the schedule.
+**Levels.** Each deck climbs a consulting ladder: Intern, Analyst, Consultant, Manager, Partner. A card is *solid* when its next review is a week or more away; when every card of a level is solid, the next level opens. Earlier levels keep coming back in reviews, so the base is never lost. *Mastered* means the next review is three weeks or more away.
 
-### Motivation
-- **Daily goal:** the day's reviews plus your new cards, fixed at your first visit. Reach it and the day is won; anything after is a bonus round.
-- **Levels and chapters:** close every chapter of a level to move up, from Intern to Partner.
-- **Session recap:** cards done, new cards met, expressions mastered.
+**Daily goal.** Cards due today plus your new cards (set in Settings). Finish them and the day is won.
 
-An expression counts as **mastered** when you can still understand it *and* say it three weeks after your last review.
+**Verification.** Every card links to Reverso Context to see the phrase in real sentences translated by people. Doubtful cards can be flagged and the list copied for correction. Card text always comes from the deck file, so a corrected card is fixed without losing progress.
 
 ## Result
-A single-file web app that runs in any browser, on phone or desktop, with no install and no account. Progress tab with mastered count, retention per side, streak and daily reviews; JSON backup and a CSV review log for analysis in Python. The detailed log keeps the last 180 days (older days are kept as daily counts) so the app stays well under the browser storage limit.
+A single-file web app that runs in any browser, on phone or desktop, with no install and no account: two decks, automatic grading, levels, hardest-cards practice, and two settings (new cards per day, maximum reviews per day).
 
 ## Tech
 One self-contained `index.html` (HTML, CSS, vanilla JavaScript). Progress is stored locally in the browser (`localStorage`). Built with Claude.
