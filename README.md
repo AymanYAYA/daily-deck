@@ -8,7 +8,19 @@ A small spaced-repetition flashcard app (Anki-style) to build professional Engli
 Moving from French to English at work: interviews, case studies, client meetings, emails. Generic vocabulary apps don't cover the phrases I actually need, and most flashcard apps only train you to *understand* a word, not to *say* it when you need it.
 
 ## Method
-150 hand-picked cards (English phrase, French meaning, example sentence) across 7 themes: Finance, Meeting, Interview, Consulting, Tech, Email, Case.
+Cards (English phrase, French meaning, example sentence) organised as a **pyramid of 5 levels**, from the English you use most to the most specialised:
+
+| Level | Content | Cards |
+|---|---|---|
+| 1. Intern | The core of everyday conversation: small talk, questions, opinions, reactions, time & plans, connectors, everyday verbs | 149 |
+| 2. Analyst | Workplace basics: meetings, emails | 40 |
+| 3. Consultant | Interviews, case studies, consulting | 60 |
+| 4. Manager | Convince and negotiate | coming soon |
+| 5. Partner | Finance and tech vocabulary | 50 |
+
+New cards come from your current level, chapter by chapter. A card is *solid* when you remember it a week later both ways; a level closes when all its cards are solid, and earlier levels keep coming back in reviews, so the base is never lost.
+
+**Verification:** every card links to Reverso Context to see the phrase in real sentences translated by people, and doubtful cards can be flagged and exported for correction. Card text always comes from the deck, so a corrected card is fixed for everyone without losing progress.
 
 How the learning logic works:
 
@@ -20,7 +32,7 @@ How the learning logic works:
 
 ### Motivation
 - **Daily goal:** the day's reviews plus your new cards, fixed at your first visit. Reach it and the day is won; anything after is a bonus round.
-- **Chapters:** each theme is a chapter you close by mastering all its cards.
+- **Levels and chapters:** close every chapter of a level to move up, from Intern to Partner.
 - **Session recap:** cards done, new cards met, expressions mastered.
 
 An expression counts as **mastered** when you can still understand it *and* say it three weeks after your last review.

@@ -230,7 +230,8 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
 </nav>
 
 <script>
-// ---------- Deck: [English, French, example, context] ----------
+// ---------- Deck: [English, French, example, chapter, level] ----------
+// The level is optional on the first 150 rows: it comes from TAG_LEVEL below.
 // Append-only: a card's id comes from its position, so new cards go at the end and never replace old ones.
 const DECK = [
 ["Walk me through your resume","Présentez-moi votre parcours","Walk me through your resume, focusing on your last two roles.","Interview"],
@@ -382,7 +383,157 @@ const DECK = [
 ["a dashboard","un tableau de bord","The dashboard replaced ten static files.","Tech"],
 ["to automate a workflow","automatiser un processus","I automated the follow-up workflow.","Tech"],
 ["a data-driven decision","une décision fondée sur les données","It was a data-driven decision, not a gut feeling.","Tech"],
-["end-to-end","de bout en bout","I own the pre-sales cycle end-to-end.","Tech"]
+["end-to-end","de bout en bout","I own the pre-sales cycle end-to-end.","Tech"],
+// ---------- Level 1 · Intern: the core of everyday conversation ----------
+["How's it going?", "Comment ça va ?", "Hey Tom, how's it going?", "Small talk", "Intern"],
+["Not bad, thanks.", "Pas mal, merci.", "Not bad, thanks. And you?", "Small talk", "Intern"],
+["Nice to meet you.", "Enchanté.", "I'm Ayman, nice to meet you.", "Small talk", "Intern"],
+["What do you do?", "Tu fais quoi dans la vie ?", "So, what do you do?", "Small talk", "Intern"],
+["Where are you from?", "Tu viens d'où ?", "Where are you from originally?", "Small talk", "Intern"],
+["How was your weekend?", "C'était comment, ton week-end ?", "Hi! How was your weekend?", "Small talk", "Intern"],
+["What are you up to?", "Qu'est-ce que tu fais de beau ?", "What are you up to this weekend?", "Small talk", "Intern"],
+["Long time no see!", "Ça fait longtemps !", "Long time no see! How are you?", "Small talk", "Intern"],
+["It's been a while.", "Ça fait un bail.", "It's been a while since we last talked.", "Small talk", "Intern"],
+["How long have you been here?", "Ça fait combien de temps que tu es ici ?", "How long have you been here in London?", "Small talk", "Intern"],
+["I've been living here for a year.", "J'habite ici depuis un an.", "I've been living here for a year now.", "Small talk", "Intern"],
+["What do you do for fun?", "Qu'est-ce que tu fais pour te détendre ?", "What do you do for fun after work?", "Small talk", "Intern"],
+["I'm really into…", "Je suis vraiment branché… / J'adore…", "I'm really into running at the moment.", "Small talk", "Intern"],
+["Have a good one!", "Bonne journée ! / Bonne soirée !", "Thanks for your help, have a good one!", "Small talk", "Intern"],
+["See you later.", "À plus tard.", "I have to go, see you later.", "Small talk", "Intern"],
+["Take care.", "Prends soin de toi.", "Bye, take care!", "Small talk", "Intern"],
+["Say hi to … for me.", "Dis bonjour à … de ma part.", "Say hi to your brother for me.", "Small talk", "Intern"],
+["It was nice talking to you.", "J'ai été content de te parler.", "It was nice talking to you, see you soon.", "Small talk", "Intern"],
+["What a small world!", "Le monde est petit !", "You know Sarah too? What a small world!", "Small talk", "Intern"],
+["How do you know each other?", "Vous vous connaissez comment ?", "So how do you know each other?", "Small talk", "Intern"],
+["Let's keep in touch.", "Restons en contact.", "Let's keep in touch, here's my number.", "Small talk", "Intern"],
+["I'm from Paris.", "Je viens de Paris.", "I'm from Paris, but I live in Mauritius now.", "Small talk", "Intern"],
+["What do you mean?", "Qu'est-ce que tu veux dire ?", "Sorry, what do you mean by \"soon\"?", "Questions", "Intern"],
+["Could you say that again?", "Tu peux répéter ?", "Sorry, could you say that again more slowly?", "Questions", "Intern"],
+["How do you say … in English?", "Comment on dit … en anglais ?", "How do you say \"devis\" in English?", "Questions", "Intern"],
+["What does … mean?", "Que veut dire … ?", "What does \"ASAP\" mean?", "Questions", "Intern"],
+["Could you speak more slowly?", "Tu peux parler plus lentement ?", "Could you speak more slowly, please?", "Questions", "Intern"],
+["How do you spell that?", "Comment ça s'écrit ?", "Nice name! How do you spell that?", "Questions", "Intern"],
+["Can I ask you something?", "Je peux te demander quelque chose ?", "Can I ask you something about the project?", "Questions", "Intern"],
+["Do you mind if…?", "Ça te dérange si… ?", "Do you mind if I open the window?", "Questions", "Intern"],
+["Is it OK if…?", "Ça te va si… ? / Je peux… ?", "Is it OK if I join you?", "Questions", "Intern"],
+["Would you like to…?", "Ça te dirait de… ?", "Would you like to grab a coffee?", "Questions", "Intern"],
+["How about…?", "Et si on… ? / Que dirais-tu de… ?", "How about Friday at 6?", "Questions", "Intern"],
+["What's the matter?", "Qu'est-ce qui ne va pas ?", "You look tired. What's the matter?", "Questions", "Intern"],
+["What happened?", "Qu'est-ce qui s'est passé ?", "What happened? You look upset.", "Questions", "Intern"],
+["How come?", "Comment ça se fait ?", "You're not coming? How come?", "Questions", "Intern"],
+["What's it like?", "C'est comment ?", "You live in London? What's it like?", "Questions", "Intern"],
+["How much is it?", "Ça coûte combien ?", "How much is it for two people?", "Questions", "Intern"],
+["How long does it take?", "Ça prend combien de temps ?", "How long does it take to get there?", "Questions", "Intern"],
+["Where can I find…?", "Où est-ce que je peux trouver… ?", "Where can I find a pharmacy?", "Questions", "Intern"],
+["Are you sure?", "Tu es sûr ?", "Are you sure it's today?", "Questions", "Intern"],
+["Any idea why?", "Tu sais pourquoi ? / Une idée de pourquoi ?", "The printer isn't working. Any idea why?", "Questions", "Intern"],
+["What do you think?", "Qu'est-ce que tu en penses ?", "Here's my plan. What do you think?", "Questions", "Intern"],
+["I think so.", "Je pense que oui.", "Is it open on Sunday? I think so.", "Opinions", "Intern"],
+["I don't think so.", "Je ne pense pas.", "Will it rain today? I don't think so.", "Opinions", "Intern"],
+["It depends.", "Ça dépend.", "It depends on the price.", "Opinions", "Intern"],
+["I'm not sure.", "Je ne suis pas sûr.", "I'm not sure it's a good idea.", "Opinions", "Intern"],
+["I agree with you.", "Je suis d'accord avec toi.", "I agree with you, it's too expensive.", "Opinions", "Intern"],
+["I don't agree.", "Je ne suis pas d'accord.", "Sorry, I don't agree with that.", "Opinions", "Intern"],
+["That makes sense.", "C'est logique. / Ça se tient.", "OK, that makes sense now.", "Opinions", "Intern"],
+["In my opinion,", "À mon avis,", "In my opinion, we should wait.", "Opinions", "Intern"],
+["To be honest,", "Pour être honnête, / Franchement,", "To be honest, I didn't like the film.", "Opinions", "Intern"],
+["I'd rather…", "Je préférerais…", "I'd rather stay at home tonight.", "Opinions", "Intern"],
+["I prefer … to …", "Je préfère … à …", "I prefer tea to coffee.", "Opinions", "Intern"],
+["It's not a big deal.", "Ce n'est pas bien grave.", "Don't worry, it's not a big deal.", "Opinions", "Intern"],
+["It's worth it.", "Ça vaut le coup.", "It's expensive, but it's worth it.", "Opinions", "Intern"],
+["It's up to you.", "C'est toi qui vois.", "Pizza or sushi? It's up to you.", "Opinions", "Intern"],
+["I don't mind.", "Ça m'est égal. / Ça ne me dérange pas.", "We can go now or later, I don't mind.", "Opinions", "Intern"],
+["I have no idea.", "Je n'en ai aucune idée.", "Where's Tom? I have no idea.", "Opinions", "Intern"],
+["You're right.", "Tu as raison.", "You're right, I made a mistake.", "Opinions", "Intern"],
+["Fair enough.", "Ça se comprend. / C'est juste.", "You're tired? Fair enough, let's stop here.", "Opinions", "Intern"],
+["That's a good point.", "Bonne remarque.", "That's a good point, I hadn't thought of that.", "Opinions", "Intern"],
+["I'm not a big fan of…", "Je ne suis pas fan de…", "I'm not a big fan of spicy food.", "Opinions", "Intern"],
+["It's better than nothing.", "C'est mieux que rien.", "Only one day off? It's better than nothing.", "Opinions", "Intern"],
+["No worries.", "Pas de souci.", "Sorry I'm late! No worries.", "Reactions", "Intern"],
+["Sounds good.", "Ça marche.", "Let's meet at 6. Sounds good.", "Reactions", "Intern"],
+["I'm sorry to hear that.", "Désolé d'apprendre ça.", "You're sick? I'm sorry to hear that.", "Reactions", "Intern"],
+["That's great!", "C'est génial !", "You got the job? That's great!", "Reactions", "Intern"],
+["Good for you!", "Tant mieux pour toi ! / Bravo !", "You passed the exam? Good for you!", "Reactions", "Intern"],
+["Really?", "Ah bon ? / Vraiment ?", "Really? I didn't know that.", "Reactions", "Intern"],
+["No way!", "C'est pas vrai ! / Pas possible !", "No way! You met him in person?", "Reactions", "Intern"],
+["I see.", "Je vois.", "I see. So the meeting is cancelled.", "Reactions", "Intern"],
+["Of course.", "Bien sûr.", "Can I sit here? Of course.", "Reactions", "Intern"],
+["Never mind.", "Laisse tomber. / Ce n'est pas grave.", "Never mind, I'll do it myself.", "Reactions", "Intern"],
+["Thanks a lot.", "Merci beaucoup.", "Thanks a lot for your help.", "Reactions", "Intern"],
+["You're welcome.", "De rien.", "Thanks for the lift! You're welcome.", "Reactions", "Intern"],
+["My bad.", "Ma faute. / Au temps pour moi.", "Oh, my bad, I sent the wrong file.", "Reactions", "Intern"],
+["Excuse me,", "Excusez-moi, (pour interpeller quelqu'un)", "Excuse me, is this seat free?", "Reactions", "Intern"],
+["Sorry?", "Pardon ? (je n'ai pas entendu)", "Sorry? I didn't hear you.", "Reactions", "Intern"],
+["Good luck!", "Bonne chance !", "Good luck with your interview!", "Reactions", "Intern"],
+["Congratulations!", "Félicitations !", "Congratulations on your new job!", "Reactions", "Intern"],
+["Cheers!", "Santé ! / Merci ! (anglais britannique)", "Cheers for the coffee!", "Reactions", "Intern"],
+["That's a shame.", "C'est dommage.", "You can't come? That's a shame.", "Reactions", "Intern"],
+["What a relief!", "Quel soulagement !", "The flight isn't cancelled? What a relief!", "Reactions", "Intern"],
+["I can't believe it!", "Je n'arrive pas à y croire !", "We won? I can't believe it!", "Reactions", "Intern"],
+["I'm about to…", "Je suis sur le point de…", "I'm about to leave, can I call you back?", "Time & plans", "Intern"],
+["I used to…", "Avant, je… (une habitude passée)", "I used to live in Paris.", "Time & plans", "Intern"],
+["I'm looking forward to it.", "J'ai hâte.", "See you on Friday, I'm looking forward to it!", "Time & plans", "Intern"],
+["I'm going to…", "Je vais… (un projet)", "I'm going to call him tomorrow.", "Time & plans", "Intern"],
+["I'm on my way.", "Je suis en route.", "I'm on my way, see you in ten minutes.", "Time & plans", "Intern"],
+["I'll be there in five minutes.", "J'arrive dans cinq minutes.", "Sorry, traffic! I'll be there in five minutes.", "Time & plans", "Intern"],
+["I'm running late.", "Je suis en retard.", "I'm running late, start without me.", "Time & plans", "Intern"],
+["What time works for you?", "Quelle heure t'arrange ?", "What time works for you tomorrow?", "Time & plans", "Intern"],
+["Are you free on…?", "Tu es libre … ?", "Are you free on Saturday?", "Time & plans", "Intern"],
+["I'm busy right now.", "Je suis occupé, là.", "I'm busy right now, can we talk later?", "Time & plans", "Intern"],
+["Let's do it another time.", "Faisons ça une autre fois.", "I'm tired tonight. Let's do it another time.", "Time & plans", "Intern"],
+["I have to go.", "Je dois y aller.", "Sorry, I have to go.", "Time & plans", "Intern"],
+["at the moment", "en ce moment", "I'm working on a big project at the moment.", "Time & plans", "Intern"],
+["in the meantime", "en attendant", "The taxi is late. In the meantime, let's have a coffee.", "Time & plans", "Intern"],
+["from time to time", "de temps en temps", "I play football from time to time.", "Time & plans", "Intern"],
+["as soon as possible", "dès que possible", "Call me back as soon as possible.", "Time & plans", "Intern"],
+["so far", "jusqu'à présent", "So far, everything is fine.", "Time & plans", "Intern"],
+["for now", "pour l'instant", "That's all for now.", "Time & plans", "Intern"],
+["the day after tomorrow", "après-demain", "I'm leaving the day after tomorrow.", "Time & plans", "Intern"],
+["I've just…", "Je viens de…", "I've just arrived at the hotel.", "Time & plans", "Intern"],
+["I haven't … yet.", "Je n'ai pas encore …", "I haven't finished yet.", "Time & plans", "Intern"],
+["By the way,", "Au fait,", "By the way, did you call Tom?", "Connectors", "Intern"],
+["Anyway,", "Bref, / En tout cas,", "Anyway, let's get back to work.", "Connectors", "Intern"],
+["Actually,", "En fait,", "Actually, I've changed my mind.", "Connectors", "Intern"],
+["Basically,", "En gros,", "Basically, we need more time.", "Connectors", "Intern"],
+["So,", "Donc, / Alors,", "So, what do we do now?", "Connectors", "Intern"],
+["What's more,", "De plus,", "It's cheap. What's more, it's near the beach.", "Connectors", "Intern"],
+["However,", "Cependant,", "It's cheap. However, it's far from the city.", "Connectors", "Intern"],
+["Although", "Bien que", "Although it was late, we kept working.", "Connectors", "Intern"],
+["Even though", "Même si", "Even though I was tired, I went running.", "Connectors", "Intern"],
+["because of", "à cause de", "We're late because of the traffic.", "Connectors", "Intern"],
+["That's why", "C'est pour ça que", "I was sick. That's why I didn't come.", "Connectors", "Intern"],
+["First of all,", "Tout d'abord,", "First of all, thank you for coming.", "Connectors", "Intern"],
+["Then", "Ensuite", "First we eat, then we go to the cinema.", "Connectors", "Intern"],
+["Finally,", "Pour finir, / Enfin,", "Finally, we found the hotel.", "Connectors", "Intern"],
+["For example,", "Par exemple,", "I love Asian food, for example sushi.", "Connectors", "Intern"],
+["On the other hand,", "D'un autre côté,", "It's cheap. On the other hand, it's small.", "Connectors", "Intern"],
+["Unless", "À moins que", "We'll go out unless it rains.", "Connectors", "Intern"],
+["As long as", "Tant que", "You can stay as long as you want.", "Connectors", "Intern"],
+["Otherwise,", "Sinon,", "Take an umbrella, otherwise you'll get wet.", "Connectors", "Intern"],
+["Instead of", "Au lieu de", "Let's walk instead of taking the bus.", "Connectors", "Intern"],
+["Also,", "Aussi, (pour ajouter un point)", "Also, don't forget your passport.", "Connectors", "Intern"],
+["to find out", "découvrir, apprendre (une information)", "I found out the truth yesterday.", "Everyday verbs", "Intern"],
+["to figure out", "comprendre, trouver (la solution)", "I can't figure out how this works.", "Everyday verbs", "Intern"],
+["to look for", "chercher", "I'm looking for my keys.", "Everyday verbs", "Intern"],
+["to look after", "s'occuper de, garder", "Can you look after my bag?", "Everyday verbs", "Intern"],
+["to pick up", "aller chercher (quelqu'un, quelque chose)", "I'll pick you up at the station.", "Everyday verbs", "Intern"],
+["to give up", "abandonner", "Don't give up, you're almost there.", "Everyday verbs", "Intern"],
+["to turn down", "refuser (une offre)", "She turned down the job offer.", "Everyday verbs", "Intern"],
+["to come up with", "trouver, avoir (une idée)", "We came up with a better plan.", "Everyday verbs", "Intern"],
+["to get along with", "bien s'entendre avec", "I get along with my colleagues.", "Everyday verbs", "Intern"],
+["to run out of", "ne plus avoir de, être à court de", "We've run out of milk.", "Everyday verbs", "Intern"],
+["to catch up", "se donner des nouvelles / rattraper son retard", "Let's grab a coffee and catch up.", "Everyday verbs", "Intern"],
+["to set up", "installer, mettre en place", "I need to set up my new phone.", "Everyday verbs", "Intern"],
+["to deal with", "gérer, s'occuper de (un problème)", "I'll deal with it tomorrow.", "Everyday verbs", "Intern"],
+["to make sure", "s'assurer de", "Make sure you lock the door.", "Everyday verbs", "Intern"],
+["to get used to", "s'habituer à", "I'm getting used to the heat.", "Everyday verbs", "Intern"],
+["to hang out", "traîner, passer du temps ensemble", "We hang out every Friday.", "Everyday verbs", "Intern"],
+["to check out", "jeter un œil à, découvrir", "Check out this new restaurant.", "Everyday verbs", "Intern"],
+["to show up", "arriver, se pointer", "He showed up two hours late.", "Everyday verbs", "Intern"],
+["to put off", "repousser, remettre à plus tard", "Stop putting it off and do it now.", "Everyday verbs", "Intern"],
+["to call back", "rappeler", "I'll call you back in five minutes.", "Everyday verbs", "Intern"],
+["to fill in", "remplir (un formulaire)", "Please fill in this form.", "Everyday verbs", "Intern"],
+["to work out", "s'arranger, finir par marcher", "Don't worry, it'll work out.", "Everyday verbs", "Intern"],
 ];
 
 // ---------- Storage ----------
@@ -404,14 +555,33 @@ function streakNow() {
   while (days.has(dayKey(t))) { streak++; t -= DAY; }
   return streak;
 }
-function chapters() {
+// ---------- Levels ----------
+// A pyramid: the base you use most comes first, then more and more specialised English.
+// New cards come from your current level, chapter by chapter. Cards from earlier levels keep coming back in reviews.
+const LEVELS = [
+  ["Intern", "The core of everyday conversation"],
+  ["Analyst", "Workplace basics: meetings and emails"],
+  ["Consultant", "Interviews, cases and consulting"],
+  ["Manager", "Convince and negotiate (cards coming soon)"],
+  ["Partner", "Finance and tech vocabulary"],
+];
+const TAG_LEVEL = { Meeting: "Analyst", Email: "Analyst", Interview: "Consultant", Case: "Consultant", Consulting: "Consultant", Finance: "Partner", Tech: "Partner" };
+const SOLID = 7; // a card is solid once both sides hold a 1-week gap
+const isSolid = c => c.interval >= SOLID && c.p.interval >= SOLID;
+const levelCards = name => S.cards.filter(c => c.level === name);
+function currentLevel() { // index of the first level not closed yet (a level with no cards yet stops the climb)
+  for (let i = 0; i < LEVELS.length; i++) { const cs = levelCards(LEVELS[i][0]); if (!cs.length || !cs.every(isSolid)) return i; }
+  return LEVELS.length;
+}
+function chapters(level) {
   const m = new Map();
-  S.cards.forEach(c => {
-    if (!m.has(c.tag)) m.set(c.tag, { tag: c.tag, total: 0, seen: 0, mastered: 0 });
-    const x = m.get(c.tag); x.total++; if (c.introduced) x.seen++; if (isMastered(c)) x.mastered++;
+  levelCards(level).forEach(c => {
+    if (!m.has(c.tag)) m.set(c.tag, { tag: c.tag, total: 0, seen: 0, solid: 0 });
+    const x = m.get(c.tag); x.total++; if (c.introduced) x.seen++; if (isSolid(c)) x.solid++;
   });
   return [...m.values()];
 }
+function currentChapter(level) { const ch = chapters(level); return (ch.find(x => x.seen < x.total) || ch.find(x => x.solid < x.total) || {}).tag; }
 let fxTimer, fxQueue = [];
 function toast(html, big) { fxQueue.push([html, big]); if (fxQueue.length === 1) showFx(); }
 function showFx() {
@@ -432,7 +602,7 @@ function confetti() {
 }
 let S;
 function blank() { return { introduced: null, due: 0, interval: 0, ease: 2.3, reps: 0, lapses: 0 }; }
-function makeCard(d, i) { return { id: "d" + (i + 1), en: d[0], fr: d[1], ex: d[2], tag: d[3], ...blank(), p: blank() }; }
+function makeCard(d, i) { return { id: "d" + (i + 1), en: d[0], fr: d[1], ex: d[2], tag: d[3], level: d[4] || TAG_LEVEL[d[3]], ...blank(), p: blank() }; }
 function fresh() {
   return { cards: DECK.map(makeCard), log: [], settings: {}, intro: {}, introP: {} };
 }
@@ -442,19 +612,22 @@ function normalize() {
   S.intro = S.intro || {}; S.introP = S.introP || {}; S.log = S.log || [];
   S.cards.forEach(c => { if (!c.p) c.p = blank(); });
   S.goal = S.goal || {}; S.flags = S.flags || {};
+  S.cards.forEach(c => { if (!c.level) c.level = TAG_LEVEL[c.tag] || "Intern"; });
 }
 let merged = 0;
 function load() {
   try { const raw = localStorage.getItem(KEY); if (raw) S = JSON.parse(raw); } catch (e) {}
   if (!S || !Array.isArray(S.cards)) { S = fresh(); normalize(); return; }
   normalize();
-  // Cards added to the deck after the first launch join the saved progress and come first in the new cards.
-  const have = new Set(S.cards.map(c => c.id));
+  // Cards added to the deck after the first launch join the saved progress.
+  // Text, chapter and level always come from the deck, so a corrected card is fixed everywhere and keeps its progress.
+  const byIdMap = new Map(S.cards.map(c => [c.id, c]));
   DECK.forEach((d, i) => {
-    if (have.has("d" + (i + 1))) return;
-    S.cards.push({ ...makeCard(d, i), asked: true });
-    merged++;
+    const c = byIdMap.get("d" + (i + 1)), m = makeCard(d, i);
+    if (c) { c.en = m.en; c.fr = m.fr; c.ex = m.ex; c.tag = m.tag; c.level = m.level; delete c.asked; return; }
+    S.cards.push(m); merged++;
   });
+  if (S.level === undefined) S.level = currentLevel();
   if (merged) save();
 }
 // Browsers give each site about 5 MB. Keep the detailed log for 180 days; older days are kept as a simple count per day.
@@ -522,7 +695,8 @@ function buildQueue() {
     const k = dayKey();
     const roomR = Math.max(0, S.settings.newPerDay - (S.intro[k] || 0));
     const roomP = Math.max(0, S.settings.newPerDay - (S.introP[k] || 0));
-    const newR = S.cards.filter(c => !c.introduced).sort((a, b) => (b.asked ? 1 : 0) - (a.asked ? 1 : 0)).slice(0, roomR).map(c => c.id + "|r");
+    const lvl = LEVELS[currentLevel()];
+    const newR = lvl ? levelCards(lvl[0]).filter(c => !c.introduced).slice(0, roomR).map(c => c.id + "|r") : [];
     const newP = S.cards.filter(c => unlocked(c) && !c.p.introduced).slice(0, roomP).map(c => c.id + "|p");
     for (let i = 0; i < Math.max(newR.length, newP.length); i++) { if (newP[i]) fresh.push(newP[i]); if (newR[i]) fresh.push(newR[i]); }
   }
@@ -558,6 +732,9 @@ function grade(g) {
     s.due = dayStart() + s.interval * DAY;
     S.log.push({ t: Date.now(), id: c.id, dir, g, wasNew, before, after: s.interval });
     if (!fullBefore && isMastered(c)) toast(`Expression mastered<br><b>${esc(c.en)}</b>`, true);
+    const lvNow = currentLevel();
+    if (S.level !== undefined && lvNow > S.level && LEVELS[lvNow]) { toast(`Level up<br><b>${LEVELS[lvNow][0]}</b>`, true); confetti(); }
+    S.level = lvNow;
     const goal = S.goal[dayKey()];
     if (goal && !goal.won && doneToday() >= goal.target) {
       goal.won = true; toast("Daily goal reached<br><b>Day won</b>", true); confetti();
@@ -619,6 +796,13 @@ function speak(text) {
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 
+function newLeftInLevel() { const lv = LEVELS[currentLevel()]; return lv ? levelCards(lv[0]).filter(c => !c.introduced).length : 0; }
+function where() {
+  const i = currentLevel(), lv = LEVELS[i];
+  if (!lv) return "All levels closed.";
+  const ch = currentChapter(lv[0]);
+  return `Level ${i + 1} · <b>${lv[0]}</b>${ch ? ` · chapter ${esc(ch)}` : ""}.`;
+}
 function renderStrip() {
   const g = S.goal[dayKey()], d = doneToday(), st = streakNow();
   const target = g ? g.target : 0, won = g && g.won;
@@ -629,7 +813,7 @@ function renderStrip() {
         <span class="goal-n"><b>${Math.min(d, target)}</b> / ${target}${d > target ? ` <span class="bonus">+${d - target} bonus</span>` : ""}</span></div>
       <div class="bar goalbar"><i style="width:${pct * 100}%"></i></div>
     </div>
-    <p class="muted goal-note">${won ? "Anything more today is bonus." : `Today's reviews plus ${S.settings.newPerDay} new cards (change it in Progress → Settings).`} ${st ? `${st}-day streak.` : ""}</p>`;
+    <p class="muted goal-note">${where()}${won ? " Anything more today is bonus." : ""} ${st > 1 ? `${st}-day streak.` : ""}</p>`;
 }
 // Verification: see the phrase in real sentences translated by people (Reverso Context), and flag anything that looks wrong.
 function checkUrl(c) {
@@ -675,16 +859,17 @@ function renderReview() {
       ${levelUp ? `<p style="margin:0">${levelUp} side${levelUp > 1 ? "s" : ""} reached the 3-week mark today.</p>` : ""}
       <p class="muted" style="margin:0;font-size:.9rem">${tomorrow} card${tomorrow === 1 ? "" : "s"} due tomorrow. ${streakNow() > 1 ? `Come back to keep your ${streakNow()}-day streak.` : "See you tomorrow."}</p>
       ${backlog ? `<p class="muted" style="margin:0">${backlog} older review${backlog > 1 ? "s" : ""} will wait for tomorrow, so the daily load stays light.</p>` :
-      `<button class="primary" id="moreNew" type="button">Bonus round · 5 more new cards</button>`}
+      (newLeftInLevel() ? `<button class="primary" id="moreNew" type="button">Bonus round · 5 more new cards</button>` :
+      `<p class="muted" style="margin:0;font-size:.9rem">${LEVELS[currentLevel()] && levelCards(LEVELS[currentLevel()][0]).length ? "Every card of this level is started. Keep reviewing: the level closes when each card holds a week both ways." : "The next level's cards are being written."}</p>`)}
     </div>`;
-    if (!backlog) $("#moreNew").onclick = () => { S.settings.newPerDay += 5; buildQueue(); S.settings.newPerDay -= 5; next(); renderReview(); };
+    if (!backlog && $("#moreNew")) $("#moreNew").onclick = () => { S.settings.newPerDay += 5; buildQueue(); S.settings.newPerDay -= 5; next(); renderReview(); };
     return;
   }
   const { c, dir } = parseQ(current);
   const s = side(c, dir);
   const say = dir === "p";
   const notes = [];
-  if (merged) notes.push(`${merged} new card${merged > 1 ? "s" : ""} added to your deck. They come first.`);
+  if (merged) notes.push(`${merged} new card${merged > 1 ? "s" : ""} added to your deck.`);
   if (backlog && !practice && reviewsToday() === 0) notes.push(`You were away for a bit. Today is capped at ${S.settings.reviewCap} reviews, most urgent first; new cards are paused until you catch up.`);
   if (practice) notes.push(`Practice: your hardest cards. Grading here does not change your schedule.`);
   const status = !s.introduced ? "new" : s.interval >= MASTERED ? "mastered" : "learning";
@@ -774,21 +959,35 @@ function renderStats() {
         (i % 2 === 1 ? `<text x="${x + (bw - 4) / 2}" y="${H + 13}" text-anchor="middle">${new Date(b.s).getDate()}</text>` : ""); }).join("")}
   </svg>`;
   const hard = hardest();
-  const chaps = chapters().map(ch => `<div class="chap">
-      <div class="goal-top"><span><b>${esc(ch.tag)}</b>${ch.mastered === ch.total ? " · closed" : ""}</span><span class="muted">${ch.mastered} mastered · ${ch.seen} started / ${ch.total}</span></div>
-      <div class="bar two"><i class="seen" style="width:${100 * ch.seen / ch.total}%"></i><i style="width:${100 * ch.mastered / ch.total}%"></i></div>
-    </div>`).join("");
+  const li = currentLevel(), lv = LEVELS[li];
+  const lvCards = lv ? levelCards(lv[0]) : [], lvSolid = lvCards.filter(isSolid).length;
+  const ladder = LEVELS.map(([name, about], i) => {
+    const n = levelCards(name).length;
+    return `<li class="${i < li ? "past" : i === li ? "now" : ""}"><span>${i + 1}. ${name}</span><span class="muted">${i < li ? "closed" : n ? n + " cards" : "soon"}</span></li>`;
+  }).join("");
+  const chaps = lv ? chapters(lv[0]).map(ch => `<div class="chap">
+      <div class="goal-top"><span><b>${esc(ch.tag)}</b>${ch.solid === ch.total ? " · closed" : ""}</span><span class="muted">${ch.solid} solid · ${ch.seen} started / ${ch.total}</span></div>
+      <div class="bar two"><i class="seen" style="width:${100 * ch.seen / ch.total}%"></i><i style="width:${100 * ch.solid / ch.total}%"></i></div>
+    </div>`).join("") : "";
   v.innerHTML = `
-  <div class="panel">
-    <h2>Chapters</h2>
-    <p class="muted" style="margin:0;font-size:.85rem">One chapter per theme. Light bar: cards started. Dark bar: cards mastered. A chapter is closed when all its cards are mastered.</p>
-    ${chaps}
+  <div class="panel kpi">
+    <span class="label">Level ${li + 1} of ${LEVELS.length}</span>
+    <div class="num">${lv ? lv[0] : "All levels closed"}</div>
+    ${lv ? `<span class="muted" style="font-size:.9rem">${lv[1]}</span>
+    <div class="bar"><i style="width:${lvCards.length ? 100 * lvSolid / lvCards.length : 0}%"></i></div>
+    <span class="muted" style="font-size:.85rem">${lvSolid} / ${lvCards.length} cards solid. A card is solid when you remember it a week later, both ways. Close every chapter to reach the next level; earlier levels keep coming back in your reviews.</span>` : ""}
+    <ol class="ladder">${ladder}</ol>
   </div>
+  ${lv ? `<div class="panel">
+    <h2>Chapters of ${lv[0]}</h2>
+    <p class="muted" style="margin:0;font-size:.85rem">New cards come chapter by chapter. Light bar: started. Dark bar: solid.</p>
+    ${chaps}
+  </div>` : ""}
   <div class="panel kpi">
     <span class="label">Mastered expressions</span>
     <div class="num">${mastered} <span>/ ${goal} expressions mastered</span></div>
     <div class="bar"><i style="width:${Math.min(100, (mastered / goal) * 100)}%"></i></div>
-    <span class="muted" style="font-size:.85rem">Mastered = you still understand it <em>and</em> can say it three weeks after your last review. So the first ones show up about four weeks after you start. ${learning} in progress.</span>
+    <span class="muted" style="font-size:.85rem">Mastered = you still understand it <em>and</em> can say it three weeks after your last review. It's the long-term proof, across all levels: the first ones show up about four weeks after you start.</span>
   </div>
   <div class="panel">
     <div class="tiles">
