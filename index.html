@@ -154,6 +154,50 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
 .item .st { flex-direction: column; align-items: flex-end; justify-content: center; gap: 4px; }
 .pill.leechpill { color: var(--again); border-color: var(--again); }
 .tile .label { font-size: 0.66rem; }
+
+/* Game layer */
+.strip { display: flex; flex-direction: column; gap: 10px; margin-top: -8px; }
+.goal-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 0.9rem; }
+.goal-n { font-variant-numeric: tabular-nums; }
+.goal-n b { font-size: 1.05rem; }
+.bonus { color: var(--hard); font-weight: 600; }
+.goalbar { height: 10px; margin-top: 6px; }
+.goalbar i { transition: width 0.4s ease; }
+.goal.won .label { color: var(--good); }
+.goal.won .goalbar i { background: var(--good); }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { font-size: 0.8rem; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; background: var(--surface); white-space: nowrap; }
+.fx { position: fixed; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translate(-50%, -12px); opacity: 0; pointer-events: none; z-index: 20;
+  background: var(--accent); color: var(--surface); border-radius: 999px; padding: 8px 16px; font-weight: 600; font-size: 0.95rem; text-align: center;
+  transition: opacity 0.2s, transform 0.2s; box-shadow: 0 6px 20px rgba(42, 38, 33, 0.18); }
+.fx span { font-weight: 400; opacity: 0.85; font-size: 0.85rem; }
+.fx.show { opacity: 1; transform: translate(-50%, 0); }
+.fx.big { border-radius: 16px; padding: 14px 26px; font-weight: 400; font-size: 0.85rem; letter-spacing: 0.04em; }
+.fx.big b { display: block; font-family: var(--display); font-weight: 500; font-size: 1.6rem; letter-spacing: 0; margin-top: 2px; }
+#confetti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 19; }
+#confetti i { position: absolute; top: -12px; width: 8px; height: 12px; border-radius: 2px; animation: fall 1.8s ease-in forwards; }
+@keyframes fall { to { top: 105vh; transform: rotate(540deg); } }
+.done.won .big { color: var(--good); }
+.recap { width: 100%; text-align: center; }
+.recap .tile { align-items: center; }
+.lvl { width: 100%; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+#moreNew { width: 100%; }
+.ladder { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; font-size: 0.88rem; }
+.ladder li { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px dashed var(--line); color: var(--muted); }
+.ladder li.past { color: var(--ink); }
+.ladder li.past span:first-child::before { content: "✓ "; color: var(--good); }
+.ladder li.now { color: var(--accent); font-weight: 600; }
+.ladder li.now span:first-child::before { content: "▸ "; }
+.chap { display: flex; flex-direction: column; gap: 6px; }
+.bar.two { position: relative; }
+.bar.two i { position: absolute; left: 0; top: 0; }
+.bar.two i.seen { background: var(--line); }
+.badges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.badge { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding: 10px 4px; border-radius: 10px; border: 1px dashed var(--line); font-size: 0.82rem; opacity: 0.55; }
+.badge .muted { font-size: 0.72rem; line-height: 1.3; }
+.badge .medal { font-size: 1.5rem; color: var(--muted); line-height: 1; }
+.badge.on { opacity: 1; border-style: solid; background: var(--accent-soft); }
+.badge.on .medal { color: var(--hard); }
 </style>
 
 <div class="wrap">
@@ -161,6 +205,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     <h1>Daily Deck</h1>
     <div class="counts" id="counts"></div>
   </header>
+  <div class="strip" id="strip"></div>
 
   <!-- REVIEW -->
   <section id="view-review" data-view></section>
@@ -177,6 +222,8 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   </section>
 </div>
 
+<div id="fx" class="fx" role="status" aria-live="polite"></div>
+<div id="confetti" aria-hidden="true"></div>
 <nav class="tabs" aria-label="Sections">
   <div class="in">
     <button data-tab="review" aria-current="page"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10h8M8 14h5"/></svg>Review</button>
@@ -348,6 +395,86 @@ const MASTERED = 21; // a side counts as mastered once its interval reaches 3 we
 const UNLOCK = 3;    // "say it" (FR → EN) unlocks once you understand the card with a 3-day gap
 const HARD = 2;      // a side you missed twice or more shows up in "Hardest cards"
 const LEECH = 4;     // missed four times or more: flagged as a leech
+
+// ---------- Game layer ----------
+// XP rewards showing up and real memory, never the grade you give yourself:
+// 10 XP per card whatever the grade, +5 when a "Say it" answer is exactly right,
+// +50 when a side reaches 3 weeks, +100 when the whole expression is mastered,
+// +50 for reaching the daily goal, and double XP in the bonus round after it.
+const LEVELS = [[0, "Intern"], [300, "Junior Analyst"], [1000, "Analyst"], [2500, "Associate"], [5000, "Consultant"],
+  [10000, "Senior Consultant"], [18000, "Manager"], [30000, "Senior Manager"], [50000, "Director"], [80000, "Partner"]];
+function levelOf(xp) {
+  let i = 0; while (i + 1 < LEVELS.length && xp >= LEVELS[i + 1][0]) i++;
+  const [from, name] = LEVELS[i], to = LEVELS[i + 1] ? LEVELS[i + 1][0] : null;
+  return { n: i + 1, name, from, to, next: LEVELS[i + 1] ? LEVELS[i + 1][1] : null, pct: to ? (xp - from) / (to - from) : 1 };
+}
+const BADGES = [
+  ["first", "First step", "Review your first card"],
+  ["day1", "Day won", "Reach your daily goal"],
+  ["say1", "First words", "Type a Say it card exactly right"],
+  ["streak7", "One week", "7 days in a row"],
+  ["m10", "Ten down", "Master 10 expressions"],
+  ["chapter", "Chapter closed", "Master every card of one theme"],
+  ["streak30", "One month", "30 days in a row"],
+  ["m50", "Fifty down", "Master 50 expressions"],
+  ["all", "Deck complete", "Master every expression"],
+];
+const isMastered = c => c.interval >= MASTERED && c.p.interval >= MASTERED;
+const masteredCount = () => S.cards.filter(isMastered).length;
+function doneToday() { const s = dayStart(); return new Set(S.log.filter(l => l.t >= s && !l.practice).map(l => l.id + "|" + (l.dir || "r"))).size; }
+function streakNow() {
+  const days = new Set([...Object.keys(S.days || {}), ...S.log.filter(l => !l.practice).map(l => dayKey(l.t))]);
+  let streak = 0, t = Date.now();
+  if (!days.has(dayKey(t))) t -= DAY;
+  while (days.has(dayKey(t))) { streak++; t -= DAY; }
+  return streak;
+}
+function chapters() {
+  const m = new Map();
+  S.cards.forEach(c => {
+    if (!m.has(c.tag)) m.set(c.tag, { tag: c.tag, total: 0, seen: 0, mastered: 0 });
+    const x = m.get(c.tag); x.total++; if (c.introduced) x.seen++; if (isMastered(c)) x.mastered++;
+  });
+  return [...m.values()];
+}
+let fxTimer, fxQueue = [];
+function toast(html, big) { fxQueue.push([html, big]); if (fxQueue.length === 1) showFx(); }
+function showFx() {
+  const [html, big] = fxQueue[0]; const t = $("#fx");
+  t.innerHTML = html; t.className = "fx show" + (big ? " big" : "");
+  clearTimeout(fxTimer);
+  fxTimer = setTimeout(() => { t.className = "fx"; fxQueue.shift(); if (fxQueue.length) setTimeout(showFx, 150); }, big ? 2400 : 900);
+}
+function confetti() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const box = $("#confetti"), colors = ["#4E5D3A", "#9A7531", "#A6533F", "#4E7A4C", "#E7E6D3"];
+  for (let i = 0; i < 36; i++) {
+    const e = document.createElement("i");
+    e.style.left = Math.random() * 100 + "vw"; e.style.background = colors[i % colors.length];
+    e.style.animationDelay = Math.random() * 0.3 + "s"; e.style.transform = `rotate(${Math.random() * 360}deg)`;
+    box.appendChild(e); setTimeout(() => e.remove(), 2200);
+  }
+}
+function addXp(n, why) {
+  const before = levelOf(S.xp);
+  S.xp += n; S.xpDay[dayKey()] = (S.xpDay[dayKey()] || 0) + n;
+  const after = levelOf(S.xp);
+  toast(`+${n} XP${why ? ` <span>${why}</span>` : ""}`);
+  if (after.n > before.n) { toast(`Level up<br><b>${after.name}</b>`, true); confetti(); }
+}
+function award(id) {
+  if (S.badges[id]) return;
+  S.badges[id] = Date.now();
+  const b = BADGES.find(x => x[0] === id);
+  toast(`Badge unlocked<br><b>${b[1]}</b>`, true);
+}
+function checkBadges() {
+  if (S.log.some(l => !l.practice)) award("first");
+  if (Object.values(S.goal).some(g => g.won)) award("day1");
+  const st = streakNow(); if (st >= 7) award("streak7"); if (st >= 30) award("streak30");
+  const m = masteredCount(); if (m >= 10) award("m10"); if (m >= 50) award("m50"); if (m >= S.cards.length) award("all");
+  if (chapters().some(c => c.mastered === c.total)) award("chapter");
+}
 let S;
 function blank() { return { introduced: null, due: 0, interval: 0, ease: 2.3, reps: 0, lapses: 0 }; }
 function makeCard(d, i) { return { id: "d" + (i + 1), en: d[0], fr: d[1], ex: d[2], tag: d[3], ...blank(), p: blank() }; }
@@ -359,6 +486,8 @@ function normalize() {
   S.settings = Object.assign({ newPerDay: 10, reviewCap: 80 }, S.settings || {});
   S.intro = S.intro || {}; S.introP = S.introP || {}; S.log = S.log || [];
   S.cards.forEach(c => { if (!c.p) c.p = blank(); });
+  if (typeof S.xp !== "number") S.xp = 10 * S.log.filter(l => !l.practice).length;
+  S.xpDay = S.xpDay || {}; S.goal = S.goal || {}; S.badges = S.badges || {};
 }
 let merged = 0;
 function load() {
@@ -444,6 +573,8 @@ function buildQueue() {
     for (let i = 0; i < Math.max(newR.length, newP.length); i++) { if (newP[i]) fresh.push(newP[i]); if (newR[i]) fresh.push(newR[i]); }
   }
   queue = [...reviews, ...fresh];
+  const k = dayKey();
+  if (!S.goal[k]) { S.goal[k] = { target: queue.length + doneToday(), won: false }; save(); }
 }
 function hardest() {
   const out = [];
@@ -463,7 +594,9 @@ function grade(g) {
   const s = side(c, dir);
   if (practice) {
     S.log.push({ t: Date.now(), id: c.id, dir, g, practice: true });
+    addXp(5, "practice");
   } else {
+    const fullBefore = isMastered(c);
     const wasNew = !s.introduced;
     const elapsed = elapsedDays(s);
     if (wasNew) { s.introduced = Date.now(); const k = dir === "p" ? "introP" : "intro"; S[k][dayKey()] = (S[k][dayKey()] || 0) + 1; }
@@ -471,6 +604,18 @@ function grade(g) {
     Object.assign(s, nextState(s, g, elapsed));
     s.due = dayStart() + s.interval * DAY;
     S.log.push({ t: Date.now(), id: c.id, dir, g, wasNew, before, after: s.interval });
+    const goal = S.goal[dayKey()];
+    const bonus = goal && goal.won;
+    let xp = 10, why = "";
+    if (dir === "p" && verdict && verdict.g === 2 && verdict.cls === "good") { xp += 5; why = "exact"; award("say1"); }
+    if (before < MASTERED && s.interval >= MASTERED) { xp += 50; why = "3 weeks reached"; }
+    if (!fullBefore && isMastered(c)) { xp += 100; why = "expression mastered"; }
+    if (bonus) { xp *= 2; why = why ? why + " · ×2" : "bonus ×2"; }
+    addXp(xp, why);
+    if (goal && !goal.won && doneToday() >= goal.target) {
+      goal.won = true; addXp(50, "daily goal"); toast("Daily goal reached<br><b>Day won</b>", true); confetti();
+    }
+    checkBadges();
   }
   queue.shift();
   if (g === 0) queue.splice(Math.min(3, queue.length), 0, current); // see it again a few cards later
@@ -528,7 +673,24 @@ function speak(text) {
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 
+function renderStrip() {
+  const g = S.goal[dayKey()], d = doneToday(), lv = levelOf(S.xp), st = streakNow();
+  const target = g ? g.target : 0, won = g && g.won;
+  const pct = target ? Math.min(1, d / target) : (d ? 1 : 0);
+  $("#strip").innerHTML = `
+    <div class="goal ${won ? "won" : ""}">
+      <div class="goal-top"><span class="label">${won ? "Day won" : "Today's goal"}</span>
+        <span class="goal-n"><b>${Math.min(d, target)}</b> / ${target}${d > target ? ` <span class="bonus">+${d - target} bonus</span>` : ""}</span></div>
+      <div class="bar goalbar"><i style="width:${pct * 100}%"></i></div>
+    </div>
+    <div class="chips">
+      <span class="chip"><b>Lv ${lv.n}</b> ${lv.name}</span>
+      <span class="chip" title="Days in a row">🔥 <b>${st}</b></span>
+      <span class="chip"><b>${S.xp.toLocaleString("en")}</b> XP</span>
+    </div>`;
+}
 function renderCounts() {
+  renderStrip();
   if (practice) { $("#counts").innerHTML = `<span>Practice <b>${queue.length}</b></span>`; return; }
   const newLeft = queue.filter(q => { const { c, dir } = parseQ(q); return !side(c, dir).introduced; }).length;
   $("#counts").innerHTML = `<span>New <b>${newLeft}</b></span><span>Review <b>${queue.length - newLeft}</b></span>`;
@@ -547,11 +709,26 @@ function renderReview() {
       return;
     }
     const tomorrow = S.cards.reduce((n, c) => n + (c.introduced && c.due < dayStart() + 2 * DAY ? 1 : 0) + (c.p.introduced && c.p.due < dayStart() + 2 * DAY ? 1 : 0), 0);
-    v.innerHTML = `<div class="panel done">
-      <div class="big">Done for today</div>
-      <p class="muted" style="margin:0">${sessionDone ? `You reviewed ${sessionDone} card${sessionDone > 1 ? "s" : ""} in this session.` : "Nothing left to review right now."} ${tomorrow} card${tomorrow === 1 ? "" : "s"} due tomorrow.</p>
+    const k = dayKey(), g = S.goal[k], won = g && g.won, lv = levelOf(S.xp);
+    const t0 = dayStart(), today = S.log.filter(l => l.t >= t0 && !l.practice);
+    const met = today.filter(l => l.wasNew).length;
+    const levelUp = today.filter(l => l.before < MASTERED && l.after >= MASTERED).length;
+    v.innerHTML = `<div class="panel done ${won ? "won" : ""}">
+      <div class="big">${won ? "Day won" : "All clear"}</div>
+      <p class="muted" style="margin:0">${won ? "Daily goal reached. Everything from here is bonus, with double XP." : "Nothing left to review right now."}</p>
+      <div class="tiles recap">
+        <div class="tile"><span class="v">${doneToday()}</span><span class="label">cards today</span></div>
+        <div class="tile"><span class="v">${met}</span><span class="label">new sides met</span></div>
+        <div class="tile"><span class="v">${S.xpDay[k] || 0}</span><span class="label">XP today</span></div>
+      </div>
+      ${levelUp ? `<p style="margin:0">${levelUp} side${levelUp > 1 ? "s" : ""} reached the 3-week mark today.</p>` : ""}
+      <div class="lvl">
+        <div class="goal-top"><span><b>Lv ${lv.n}</b> · ${lv.name}</span><span class="muted">${lv.to ? `${(lv.to - S.xp).toLocaleString("en")} XP to ${lv.next}` : "Top level"}</span></div>
+        <div class="bar"><i style="width:${lv.pct * 100}%"></i></div>
+      </div>
+      <p class="muted" style="margin:0;font-size:.9rem">${tomorrow} card${tomorrow === 1 ? "" : "s"} due tomorrow. Come back to keep your 🔥 ${streakNow()}-day streak.</p>
       ${backlog ? `<p class="muted" style="margin:0">${backlog} older review${backlog > 1 ? "s" : ""} will wait for tomorrow, so the daily load stays light.</p>` :
-      `<div class="row" style="justify-content:center"><button class="small" id="moreNew">Learn 5 more new cards</button></div>`}
+      `<button class="primary" id="moreNew" type="button">Bonus round · 5 new cards${won ? " · double XP" : ""}</button>`}
     </div>`;
     if (!backlog) $("#moreNew").onclick = () => { S.settings.newPerDay += 5; buildQueue(); S.settings.newPerDay -= 5; next(); renderReview(); };
     return;
@@ -632,11 +809,7 @@ function renderStats() {
   const mastered = S.cards.filter(c => c.interval >= MASTERED && c.p.interval >= MASTERED).length;
   const goal = 1000;
   const learning = S.cards.filter(c => c.introduced).length - mastered;
-  // streak: consecutive days with at least one review, ending today or yesterday
-  const days = new Set([...Object.keys(S.days || {}), ...S.log.filter(l => !l.practice).map(l => dayKey(l.t))]);
-  let streak = 0, t = Date.now();
-  if (!days.has(dayKey(t))) t -= DAY;
-  while (days.has(dayKey(t))) { streak++; t -= DAY; }
+  const streak = streakNow();
   // last 14 days
   const bars = [];
   for (let i = 13; i >= 0; i--) { const s = dayStart() - i * DAY; bars.push({ s, n: S.log.filter(l => l.t >= s && l.t < s + DAY).length }); }
@@ -652,7 +825,30 @@ function renderStats() {
         (i % 2 === 1 ? `<text x="${x + (bw - 4) / 2}" y="${H + 13}" text-anchor="middle">${new Date(b.s).getDate()}</text>` : ""); }).join("")}
   </svg>`;
   const hard = hardest();
+  const lv = levelOf(S.xp);
+  const ladder = LEVELS.map(([x, name], i) => `<li class="${i + 1 < lv.n ? "past" : i + 1 === lv.n ? "now" : ""}"><span>${name}</span><span class="muted">${x.toLocaleString("en")} XP</span></li>`).join("");
+  const chaps = chapters().map(ch => `<div class="chap">
+      <div class="goal-top"><span><b>${esc(ch.tag)}</b>${ch.mastered === ch.total ? " · closed" : ""}</span><span class="muted">${ch.mastered} mastered · ${ch.seen} started / ${ch.total}</span></div>
+      <div class="bar two"><i class="seen" style="width:${100 * ch.seen / ch.total}%"></i><i style="width:${100 * ch.mastered / ch.total}%"></i></div>
+    </div>`).join("");
+  const badges = BADGES.map(([id, name, how]) => `<div class="badge ${S.badges[id] ? "on" : ""}"><span class="medal">${S.badges[id] ? "★" : "☆"}</span><b>${name}</b><span class="muted">${how}</span></div>`).join("");
   v.innerHTML = `
+  <div class="panel kpi">
+    <span class="label">Your level</span>
+    <div class="num">Lv ${lv.n} <span>${lv.name}</span></div>
+    <div class="bar"><i style="width:${lv.pct * 100}%"></i></div>
+    <span class="muted" style="font-size:.85rem">${S.xp.toLocaleString("en")} XP${lv.to ? ` · ${(lv.to - S.xp).toLocaleString("en")} to ${lv.next}` : ""}. XP comes from showing up and from real memory, never from the grade you give yourself.</span>
+    <ol class="ladder">${ladder}</ol>
+  </div>
+  <div class="panel">
+    <h2>Chapters</h2>
+    <p class="muted" style="margin:0;font-size:.85rem">Close a chapter by mastering all its cards. Light bar: started. Dark bar: mastered.</p>
+    ${chaps}
+  </div>
+  <div class="panel">
+    <h2>Badges <span class="muted" style="font-size:1rem">${Object.keys(S.badges).length} / ${BADGES.length}</span></h2>
+    <div class="badges">${badges}</div>
+  </div>
   <div class="panel kpi">
     <span class="label">Goal before May 2027</span>
     <div class="num">${mastered} <span>/ ${goal} expressions mastered</span></div>
@@ -745,6 +941,7 @@ $("#search").oninput = renderLibrary;
 function go(tab) {
   document.querySelectorAll("[data-view]").forEach(s => s.hidden = s.id !== "view-" + tab);
   document.querySelectorAll("[data-tab]").forEach(b => b.dataset.tab === tab ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
+  renderStrip();
   if (tab === "review") { if (!current && !practiceDone) { buildQueue(); next(); } renderReview(); }
   if (tab === "stats") renderStats();
   if (tab === "library") renderLibrary();
