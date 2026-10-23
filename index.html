@@ -135,6 +135,25 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   .card.flip .back { animation: rise 0.25s ease-out; }
   @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 }
+
+/* Say it (FR -> EN) */
+.fr-front { font-family: var(--body); font-weight: 600; font-size: clamp(1.4rem, 5.5vw, 1.8rem); }
+.muted-front { color: var(--muted); font-size: 1.1rem; }
+.hint { font-family: ui-monospace, Menlo, monospace; letter-spacing: 0.05em; color: var(--accent); font-size: 1.05rem; overflow-wrap: anywhere; }
+.answer { display: flex; flex-direction: column; gap: 10px; }
+.answer input { font-size: 1.1rem; background: var(--surface); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.verdict { font-weight: 600; font-size: 0.95rem; }
+.verdict.good { color: var(--good); } .verdict.hard { color: var(--hard); } .verdict.again { color: var(--again); }
+.yours { color: var(--muted); font-size: 0.95rem; overflow-wrap: anywhere; }
+.yours .label { margin-right: 6px; }
+.en-ans { font-family: var(--display); font-weight: 500; font-size: 1.5rem; line-height: 1.25; overflow-wrap: anywhere; }
+.en-ans mark { background: none; color: var(--again); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.grades button.suggest { border: 2px solid currentColor; }
+.leech { color: var(--again); font-style: normal; font-weight: 600; }
+.item .st { flex-direction: column; align-items: flex-end; justify-content: center; gap: 4px; }
+.pill.leechpill { color: var(--again); border-color: var(--again); }
+.tile .label { font-size: 0.66rem; }
 </style>
 
 <div class="wrap">
@@ -325,21 +344,32 @@ const DECK = [
 // ---------- Storage ----------
 const KEY = "dailydeck.v1";
 const DAY = 86400000;
+const MASTERED = 21; // a side counts as mastered once its interval reaches 3 weeks
+const UNLOCK = 3;    // "say it" (FR → EN) unlocks once you understand the card with a 3-day gap
+const HARD = 2;      // a side you missed twice or more shows up in "Hardest cards"
+const LEECH = 4;     // missed four times or more: flagged as a leech
 let S;
-function fresh() {
-  const cards = DECK.map((d, i) => ({ id: "d" + (i + 1), en: d[0], fr: d[1], ex: d[2], tag: d[3], ...blank() }));
-  return { cards, log: [], settings: { newPerDay: 10 }, intro: {} };
-}
 function blank() { return { introduced: null, due: 0, interval: 0, ease: 2.3, reps: 0, lapses: 0 }; }
+function makeCard(d, i) { return { id: "d" + (i + 1), en: d[0], fr: d[1], ex: d[2], tag: d[3], ...blank(), p: blank() }; }
+function fresh() {
+  return { cards: DECK.map(makeCard), log: [], settings: {}, intro: {}, introP: {} };
+}
+// Older saves (and backups) only had the English → French side: add what is missing.
+function normalize() {
+  S.settings = Object.assign({ newPerDay: 10, reviewCap: 80 }, S.settings || {});
+  S.intro = S.intro || {}; S.introP = S.introP || {}; S.log = S.log || [];
+  S.cards.forEach(c => { if (!c.p) c.p = blank(); });
+}
 let merged = 0;
 function load() {
   try { const raw = localStorage.getItem(KEY); if (raw) S = JSON.parse(raw); } catch (e) {}
-  if (!S) { S = fresh(); return; }
+  if (!S || !Array.isArray(S.cards)) { S = fresh(); normalize(); return; }
+  normalize();
   // Cards added to the deck after the first launch join the saved progress and come first in the new cards.
   const have = new Set(S.cards.map(c => c.id));
   DECK.forEach((d, i) => {
     if (have.has("d" + (i + 1))) return;
-    S.cards.push({ id: "d" + (i + 1), en: d[0], fr: d[1], ex: d[2], tag: d[3], asked: true, ...blank() });
+    S.cards.push({ ...makeCard(d, i), asked: true });
     merged++;
   });
   if (merged) save();
@@ -350,52 +380,154 @@ function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e
 function dayStart(t = Date.now()) { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); }
 function dayKey(t = Date.now()) { const d = new Date(t); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
 
-// ---------- Scheduler (SM-2 style) ----------
-// grade: 0 Again, 1 Hard, 2 Good, 3 Easy. Returns the next interval in days and the new ease.
-function nextState(c, grade) {
-  let { interval, ease, reps, lapses } = c;
+// ---------- Sides ----------
+// Every card has two sides, scheduled separately:
+//   "r" = understand it (English → French), stored on the card itself
+//   "p" = say it (French → English), stored in card.p
+const side = (c, dir) => dir === "p" ? c.p : c;
+const byId = id => S.cards.find(c => c.id === id);
+const parseQ = q => { const [id, dir] = q.split("|"); return { c: byId(id), dir }; };
+const unlocked = c => !!c.introduced && c.interval >= UNLOCK;
+const DIRS = { r: "EN → FR", p: "FR → EN" };
+
+// ---------- Scheduler (SM-2 style, the logic behind Anki) ----------
+// grade: 0 Again, 1 Hard, 2 Good, 3 Easy. Returns the next gap in days and the new ease.
+// elapsed: days since the last review. If you come back late and still remember, the card earned part of that extra time.
+function elapsedDays(s) { return s.introduced && s.reps ? Math.max(0, Math.round((dayStart() - (s.due - s.interval * DAY)) / DAY)) : 0; }
+function nextState(s, grade, elapsed = s.interval) {
+  let { interval, ease, reps, lapses } = s;
   if (grade === 0) return { interval: 1, ease: Math.max(1.3, ease - 0.2), reps: 0, lapses: lapses + 1 };
+  const late = Math.max(0, elapsed - interval);
   if (reps === 0) interval = [0, 1, 1, 3][grade];
   else if (reps === 1) interval = [0, 2, 3, 5][grade];
   else if (grade === 1) { interval = Math.max(interval + 1, Math.round(interval * 1.2)); ease -= 0.15; }
-  else if (grade === 2) interval = Math.max(interval + 1, Math.round(interval * ease));
-  else { interval = Math.max(interval + 1, Math.round(interval * ease * 1.3)); ease += 0.15; }
+  else if (grade === 2) interval = Math.max(interval + 1, Math.round((interval + late / 2) * ease));
+  else { interval = Math.max(interval + 1, Math.round((interval + late) * ease * 1.3)); ease += 0.15; }
   return { interval, ease: Math.max(1.3, Math.round(ease * 100) / 100), reps: reps + 1, lapses };
 }
 function fmtInterval(d) { return d < 30 ? d + "d" : d < 365 ? Math.round(d / 30) + "mo" : (d / 365).toFixed(1) + "y"; }
-const MASTERED = 21; // a card is "mastered" once its interval reaches 3 weeks
 
 // ---------- Queue ----------
-let queue = [], current = null, flipped = false, sessionDone = 0;
-function introducedToday() { return S.intro[dayKey()] || 0; }
+let queue = [], current = null, flipped = false, sessionDone = 0, backlog = 0, practice = false, practiceDone = false;
+let typed = "", verdict = null, hint = false;
+function reviewsToday() { const s = dayStart(); return S.log.filter(l => l.t >= s && !l.wasNew && !l.practice).length; }
+// Most at risk first: how late a card is, compared with its gap. 2 days late on a 1-day gap matters more than on a 2-month gap.
+function risk(s) { return (dayStart() - s.due) / DAY / Math.max(1, s.interval); }
 function buildQueue() {
+  practice = false;
   const end = dayStart() + DAY;
-  const due = S.cards.filter(c => c.introduced && c.due < end).sort((a, b) => a.due - b.due);
-  const room = Math.max(0, S.settings.newPerDay - introducedToday());
-  const fresh = S.cards.filter(c => !c.introduced).sort((a, b) => (b.asked ? 1 : 0) - (a.asked ? 1 : 0)).slice(0, room);
-  queue = [...due, ...fresh].map(c => c.id);
+  const due = [];
+  S.cards.forEach(c => {
+    if (c.introduced && c.due < end) due.push({ q: c.id + "|r", s: c });
+    if (c.p.introduced && c.p.due < end) due.push({ q: c.id + "|p", s: c.p });
+  });
+  due.sort((a, b) => risk(b.s) - risk(a.s));
+  const room = Math.max(0, S.settings.reviewCap - reviewsToday());
+  backlog = Math.max(0, due.length - room);
+  const reviews = due.slice(0, room).map(x => x.q);
+  let fresh = [];
+  if (!backlog) { // behind on reviews: no new cards until you catch up
+    const k = dayKey();
+    const roomR = Math.max(0, S.settings.newPerDay - (S.intro[k] || 0));
+    const roomP = Math.max(0, S.settings.newPerDay - (S.introP[k] || 0));
+    const newR = S.cards.filter(c => !c.introduced).sort((a, b) => (b.asked ? 1 : 0) - (a.asked ? 1 : 0)).slice(0, roomR).map(c => c.id + "|r");
+    const newP = S.cards.filter(c => unlocked(c) && !c.p.introduced).slice(0, roomP).map(c => c.id + "|p");
+    for (let i = 0; i < Math.max(newR.length, newP.length); i++) { if (newP[i]) fresh.push(newP[i]); if (newR[i]) fresh.push(newR[i]); }
+  }
+  queue = [...reviews, ...fresh];
 }
-function byId(id) { return S.cards.find(c => c.id === id); }
+function hardest() {
+  const out = [];
+  S.cards.forEach(c => ["r", "p"].forEach(dir => { const s = side(c, dir); if (s.lapses >= HARD) out.push({ c, dir, s }); }));
+  return out.sort((a, b) => b.s.lapses - a.s.lapses);
+}
+// Practice: replay your hardest cards. It does not change when they come back.
+function startPractice() {
+  queue = hardest().slice(0, 15).map(x => x.c.id + "|" + x.dir);
+  practice = true; practiceDone = false; next(); go("review");
+}
+function next() { current = queue[0] || null; flipped = false; typed = ""; verdict = null; hint = false; }
 
 function grade(g) {
-  const c = byId(current); if (!c) return;
-  const wasNew = !c.introduced;
-  if (wasNew) { c.introduced = Date.now(); S.intro[dayKey()] = introducedToday() + 1; }
-  const before = c.interval;
-  Object.assign(c, nextState(c, g));
-  c.due = dayStart() + c.interval * DAY;
-  S.log.push({ t: Date.now(), id: c.id, g, wasNew, before, after: c.interval });
+  if (!current) return;
+  const { c, dir } = parseQ(current);
+  const s = side(c, dir);
+  if (practice) {
+    S.log.push({ t: Date.now(), id: c.id, dir, g, practice: true });
+  } else {
+    const wasNew = !s.introduced;
+    const elapsed = elapsedDays(s);
+    if (wasNew) { s.introduced = Date.now(); const k = dir === "p" ? "introP" : "intro"; S[k][dayKey()] = (S[k][dayKey()] || 0) + 1; }
+    const before = s.interval;
+    Object.assign(s, nextState(s, g, elapsed));
+    s.due = dayStart() + s.interval * DAY;
+    S.log.push({ t: Date.now(), id: c.id, dir, g, wasNew, before, after: s.interval, typed: verdict ? verdict.label : undefined });
+  }
   queue.shift();
-  if (g === 0) queue.push(c.id); // see it again before the session ends
+  if (g === 0) queue.splice(Math.min(3, queue.length), 0, current); // see it again a few cards later
+  if (!queue.length && practice) practiceDone = true;
   sessionDone++;
   save();
-  current = queue[0] || null; flipped = false;
+  next();
   renderReview();
 }
+
+// ---------- Checking a typed or spoken answer ----------
+function norm(t) {
+  return String(t ?? "").toLowerCase().replace(/['’‘]/g, "").replace(/…/g, " ").replace(/&/g, " and ")
+    .replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+}
+const core = t => norm(t).replace(/^(to|a|an|the) /, "");
+function accepted(expected) {
+  const out = [core(expected)];
+  const m = expected.match(/^(.*?)\s*\(([^)]+)\)\s*$/); // "return on investment (ROI)": the full form or the acronym both count
+  if (m) out.push(core(m[1]), core(m[2]));
+  return out.filter(Boolean);
+}
+function lev(a, b) {
+  const d = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = d[0]; d[0] = i;
+    for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = t; }
+  }
+  return d[b.length];
+}
+function similarity(answer, expected) {
+  const a = core(answer);
+  return a ? Math.max(...accepted(expected).map(e => 1 - lev(a, e) / Math.max(a.length, e.length))) : 0;
+}
+function check(answer, expected) {
+  if (!core(answer)) return { label: "No answer", g: 0, cls: "again" };
+  const sim = similarity(answer, expected);
+  if (sim === 1) return { label: "Exact", g: 2, cls: "good" };
+  if (sim >= 0.85) return { label: "Almost: look at the small differences", g: 1, cls: "hard" };
+  return { label: "Not quite", g: 0, cls: "again" };
+}
+// Underline the words of the expected answer that you did not say.
+function diff(answer, expected) {
+  const got = new Set(norm(answer).split(" "));
+  return expected.split(/(\s+)/).map(w => /^\s+$/.test(w) || !norm(w) || got.has(norm(w)) ? esc(w) : `<mark>${esc(w)}</mark>`).join("");
+}
+const hintOf = t => t.split(" ").map(w => w.replace(/(^[^A-Za-z]*[A-Za-z])|[A-Za-z]/g, (m, first) => first || "_")).join("  ");
 
 // ---------- Speech ----------
 function speak(text) {
   try { const u = new SpeechSynthesisUtterance(text.replace("…", "")); u.lang = "en-GB"; u.rate = 0.95; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) {}
+}
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+function dictate(btn, input, expected) {
+  try {
+    const r = new SR(); r.lang = "en-GB"; r.interimResults = false; r.maxAlternatives = 3;
+    btn.textContent = "Listening…"; btn.disabled = true;
+    r.onresult = e => {
+      const alts = [...e.results[0]].map(x => x.transcript);
+      input.value = alts.sort((a, b) => similarity(b, expected) - similarity(a, expected))[0] || "";
+      input.focus();
+    };
+    r.onerror = () => { btn.textContent = "Mic unavailable"; };
+    r.onend = () => { btn.disabled = false; if (btn.textContent === "Listening…") btn.textContent = "Speak"; };
+    r.start();
+  } catch (e) { btn.textContent = "Mic unavailable"; }
 }
 
 // ---------- Rendering ----------
@@ -403,57 +535,113 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 
 function renderCounts() {
-  const newLeft = queue.filter(id => !byId(id).introduced).length;
-  const reviewLeft = queue.length - newLeft;
-  $("#counts").innerHTML = `<span>New <b>${newLeft}</b></span><span>Review <b>${reviewLeft}</b></span>`;
+  if (practice) { $("#counts").innerHTML = `<span>Practice <b>${queue.length}</b></span>`; return; }
+  const newLeft = queue.filter(q => { const { c, dir } = parseQ(q); return !side(c, dir).introduced; }).length;
+  $("#counts").innerHTML = `<span>New <b>${newLeft}</b></span><span>Review <b>${queue.length - newLeft}</b></span>`;
 }
 
 function renderReview() {
   renderCounts();
   const v = $("#view-review");
   if (!current) {
-    const tomorrow = S.cards.filter(c => c.introduced && c.due < dayStart() + 2 * DAY).length;
+    if (practiceDone) {
+      practice = false; practiceDone = false;
+      v.innerHTML = `<div class="panel done"><div class="big">Practice done</div>
+        <p class="muted" style="margin:0">Your schedule did not change. These cards still come back on their usual day.</p>
+        <div class="row" style="justify-content:center"><button class="small" id="backReview">Back to today's review</button></div></div>`;
+      $("#backReview").onclick = () => { buildQueue(); next(); renderReview(); };
+      return;
+    }
+    const tomorrow = S.cards.reduce((n, c) => n + (c.introduced && c.due < dayStart() + 2 * DAY ? 1 : 0) + (c.p.introduced && c.p.due < dayStart() + 2 * DAY ? 1 : 0), 0);
     v.innerHTML = `<div class="panel done">
       <div class="big">Done for today</div>
       <p class="muted" style="margin:0">${sessionDone ? `You reviewed ${sessionDone} card${sessionDone > 1 ? "s" : ""} in this session.` : "Nothing left to review right now."} ${tomorrow} card${tomorrow === 1 ? "" : "s"} due tomorrow.</p>
-      <div class="row" style="justify-content:center">
-        <button class="small" id="moreNew">Learn 5 more new cards</button>
-      </div>
+      ${backlog ? `<p class="muted" style="margin:0">${backlog} older review${backlog > 1 ? "s" : ""} will wait for tomorrow, so the daily load stays light.</p>` :
+      `<div class="row" style="justify-content:center"><button class="small" id="moreNew">Learn 5 more new cards</button></div>`}
     </div>`;
-    $("#moreNew").onclick = () => { S.settings.newPerDay += 5; save(); buildQueue(); current = queue[0] || null; renderReview(); S.settings.newPerDay -= 5; save(); };
+    if (!backlog) $("#moreNew").onclick = () => { S.settings.newPerDay += 5; buildQueue(); S.settings.newPerDay -= 5; next(); renderReview(); };
     return;
   }
-  const c = byId(current);
-  const note = merged ? `<div class="notice" role="status">${merged} new card${merged > 1 ? "s" : ""} added to your deck. They come first.</div>` : "";
-  const status = !c.introduced ? "new" : c.interval >= MASTERED ? "mastered" : "learning";
-  const previews = [0, 1, 2, 3].map(g => fmtInterval(nextState(c, g).interval));
-  v.innerHTML = note + `<article class="card ${flipped ? "flip" : ""}" aria-live="polite">
-      <div class="meta"><span class="tag">${esc(c.tag)}</span><span class="state">${status}</span></div>
-      <div class="front">${esc(c.en)}</div>
+  const { c, dir } = parseQ(current);
+  const s = side(c, dir);
+  const say = dir === "p";
+  const notes = [];
+  if (merged) notes.push(`${merged} new card${merged > 1 ? "s" : ""} added to your deck. They come first.`);
+  if (backlog && !practice && reviewsToday() === 0) notes.push(`You were away for a bit. Today is capped at ${S.settings.reviewCap} reviews, most urgent first; new cards are paused until you catch up.`);
+  if (practice) notes.push(`Practice: your hardest cards. Grading here does not change your schedule.`);
+  const status = !s.introduced ? "new" : s.interval >= MASTERED ? "mastered" : "learning";
+  const leech = s.lapses >= LEECH ? ` · <span class="leech">hard card</span>` : "";
+  const previews = practice ? ["", "", "", ""] : [0, 1, 2, 3].map(g => fmtInterval(nextState(s, g, elapsedDays(s)).interval));
+  const suggest = verdict ? verdict.g : -1;
+
+  let body;
+  if (!say) {
+    body = `<div class="front">${esc(c.en)}</div>
       <button class="small listen" id="listen" type="button">Listen</button>
-      ${flipped ? `<div class="back"><div class="fr">${esc(c.fr)}</div>${c.ex ? `<div class="ex">“${esc(c.ex)}”</div>` : ""}</div>` : `<div class="spacer"></div><p class="muted" style="margin:0;font-size:.9rem">Say what it means, out loud if you can, then check.</p>`}
+      ${flipped ? `<div class="back"><div class="fr">${esc(c.fr)}</div>${c.ex ? `<div class="ex">“${esc(c.ex)}”</div>` : ""}</div>`
+        : `<div class="spacer"></div><p class="muted" style="margin:0;font-size:.9rem">Say what it means, out loud if you can, then check.</p>`}`;
+  } else if (!flipped) {
+    body = `<div class="front fr-front">${esc(c.fr)}</div>
+      ${hint ? `<div class="hint" aria-label="Hint">${esc(hintOf(c.en))}</div>` : ""}
+      <div class="spacer"></div>
+      <div class="answer">
+        <label for="ans" class="sr">Your answer in English</label>
+        <input id="ans" type="text" placeholder="Type it in English" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" value="${esc(typed)}">
+        <div class="row">
+          ${SR ? `<button class="small" id="mic" type="button">Speak</button>` : ""}
+          ${hint ? "" : `<button class="small" id="hintBtn" type="button">Hint</button>`}
+        </div>
+      </div>`;
+  } else {
+    body = `<div class="front fr-front muted-front">${esc(c.fr)}</div>
+      <div class="back">
+        ${verdict ? `<div class="verdict ${verdict.cls}">${verdict.label}</div>
+          ${typed.trim() ? `<div class="yours"><span class="label">You said</span> ${esc(typed)}</div>` : ""}` : ""}
+        <div class="en-ans">${typed.trim() ? diff(typed, c.en) : esc(c.en)}</div>
+        ${c.ex ? `<div class="ex">“${esc(c.ex)}”</div>` : ""}
+        <button class="small listen" id="listen" type="button">Listen</button>
+      </div>`;
+  }
+
+  v.innerHTML = (notes.length ? notes.map(n => `<div class="notice" role="status">${n}</div>`).join("") : "") +
+    `<article class="card ${flipped ? "flip" : ""}" aria-live="polite">
+      <div class="meta"><span class="tag">${esc(c.tag)} · ${say ? "Say it" : "Understand it"}</span><span class="state">${DIRS[dir]} · ${status}${leech}</span></div>
+      ${body}
     </article>
     ${flipped ? `<div class="grades">
-      <button class="g0" data-g="0">Again<small>${previews[0]}</small></button>
-      <button class="g1" data-g="1">Hard<small>${previews[1]}</small></button>
-      <button class="g2" data-g="2">Good<small>${previews[2]}</small></button>
-      <button class="g3" data-g="3">Easy<small>${previews[3]}</small></button>
-    </div>` : `<button class="primary show" id="showBtn">Show answer</button>`}`;
-  $("#listen").onclick = () => speak(c.en);
-  if (flipped) v.querySelectorAll("[data-g]").forEach(b => b.onclick = () => grade(+b.dataset.g));
-  else $("#showBtn").onclick = () => { flipped = true; merged = 0; renderReview(); };
+      ${["Again", "Hard", "Good", "Easy"].map((n, g) => `<button class="g${g}${g === suggest ? " suggest" : ""}" data-g="${g}">${n}<small>${g === suggest ? "suggested" : previews[g]}</small></button>`).join("")}
+    </div>` : `<button class="primary show" id="showBtn">${say ? "Check" : "Show answer"}</button>`}`;
+
+  const L = $("#listen"); if (L) L.onclick = () => speak(c.en);
+  if (flipped) { v.querySelectorAll("[data-g]").forEach(b => b.onclick = () => grade(+b.dataset.g)); return; }
+  const reveal = () => {
+    if (say) { typed = $("#ans").value; verdict = check(typed, c.en); }
+    flipped = true; merged = 0; renderReview();
+  };
+  $("#showBtn").onclick = reveal;
+  if (say) {
+    const ans = $("#ans");
+    ans.oninput = () => { typed = ans.value; };
+    ans.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); reveal(); } };
+    const h = $("#hintBtn"); if (h) h.onclick = () => { typed = ans.value; hint = true; renderReview(); };
+    const m = $("#mic"); if (m) m.onclick = () => dictate(m, ans, c.en);
+    if (matchMedia("(pointer: fine)").matches) ans.focus();
+  }
+}
+
+function retentionOf(dir) {
+  const since = Date.now() - 30 * DAY;
+  const r = S.log.filter(l => l.t >= since && !l.wasNew && !l.practice && (l.dir || "r") === dir);
+  return r.length ? Math.round(100 * r.filter(l => l.g > 0).length / r.length) + "%" : "–";
 }
 
 function renderStats() {
   const v = $("#view-stats");
-  const mastered = S.cards.filter(c => c.interval >= MASTERED).length;
+  const mastered = S.cards.filter(c => c.interval >= MASTERED && c.p.interval >= MASTERED).length;
   const goal = 1000;
-  const learning = S.cards.filter(c => c.introduced && c.interval < MASTERED).length;
-  const since = Date.now() - 30 * DAY;
-  const reviews30 = S.log.filter(l => l.t >= since && !l.wasNew);
-  const retention = reviews30.length ? Math.round(100 * reviews30.filter(l => l.g > 0).length / reviews30.length) : null;
+  const learning = S.cards.filter(c => c.introduced).length - mastered;
   // streak: consecutive days with at least one review, ending today or yesterday
-  const days = new Set(S.log.map(l => dayKey(l.t)));
+  const days = new Set(S.log.filter(l => !l.practice).map(l => dayKey(l.t)));
   let streak = 0, t = Date.now();
   if (!days.has(dayKey(t))) t -= DAY;
   while (days.has(dayKey(t))) { streak++; t -= DAY; }
@@ -471,25 +659,36 @@ function renderStats() {
       return `<rect x="${x}" y="${H - h}" width="${bw - 4}" height="${h}" rx="2" fill="${i === 13 ? "var(--accent)" : "var(--accent-soft)"}"/>` +
         (i % 2 === 1 ? `<text x="${x + (bw - 4) / 2}" y="${H + 13}" text-anchor="middle">${new Date(b.s).getDate()}</text>` : ""); }).join("")}
   </svg>`;
+  const hard = hardest();
   v.innerHTML = `
   <div class="panel kpi">
     <span class="label">Goal before May 2027</span>
     <div class="num">${mastered} <span>/ ${goal} expressions mastered</span></div>
     <div class="bar"><i style="width:${Math.min(100, (mastered / goal) * 100)}%"></i></div>
-    <span class="muted" style="font-size:.85rem">A card counts as mastered when you remember it three weeks after the last review.</span>
+    <span class="muted" style="font-size:.85rem">An expression is mastered when you can still understand it <em>and</em> say it three weeks after your last review. ${learning} in progress.</span>
   </div>
   <div class="panel">
     <div class="tiles">
-      <div class="tile"><span class="label">Retention</span><span class="v">${retention === null ? "–" : retention + "%"}</span><span class="muted" style="font-size:.78rem">last 30 days</span></div>
+      <div class="tile"><span class="label">Understand</span><span class="v">${retentionOf("r")}</span><span class="muted" style="font-size:.78rem">EN → FR, 30 days</span></div>
+      <div class="tile"><span class="label">Say it</span><span class="v">${retentionOf("p")}</span><span class="muted" style="font-size:.78rem">FR → EN, 30 days</span></div>
       <div class="tile"><span class="label">Streak</span><span class="v">${streak}</span><span class="muted" style="font-size:.78rem">day${streak === 1 ? "" : "s"} in a row</span></div>
-      <div class="tile"><span class="label">Learning</span><span class="v">${learning}</span><span class="muted" style="font-size:.78rem">of ${S.cards.length} cards</span></div>
     </div>
     <div class="chart"><span class="label">Reviews per day</span>${svg}</div>
   </div>
   <div class="panel">
+    <h2>Hardest cards</h2>
+    ${hard.length ? `<div class="list">${hard.slice(0, 8).map(x => `<div class="item"><span class="en">${esc(x.c.en)}</span><span class="fr2">${esc(x.c.fr)}</span>
+      <span class="st"><span class="pill ${x.s.lapses >= LEECH ? "leechpill" : "learning"}">${DIRS[x.dir]} · missed ${x.s.lapses}×</span></span></div>`).join("")}</div>
+      <button class="primary" id="practiceBtn" type="button">Practice these now</button>
+      <p class="muted" style="margin:0;font-size:.85rem">Practice does not change your schedule. If a card stays here for weeks, rewrite its example sentence with your own words.</p>`
+      : `<p class="muted" style="margin:0">Nothing yet. Cards you miss twice or more show up here, so you can drill them.</p>`}
+  </div>
+  <div class="panel">
     <h2>Settings and backup</h2>
-    <div class="field"><label for="npd">New cards per day</label>
+    <div class="field"><label for="npd">New cards per day (each side)</label>
       <select id="npd">${[5, 10, 15, 20, 30].map(n => `<option ${n === S.settings.newPerDay ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+    <div class="field"><label for="cap">Maximum reviews per day</label>
+      <select id="cap">${[40, 60, 80, 120, 200].map(n => `<option ${n === S.settings.reviewCap ? "selected" : ""}>${n}</option>`).join("")}</select></div>
     <p class="muted" style="margin:0;font-size:.9rem">Your cards are saved on this device only. Copy a backup now and then, and use the review log for analysis in Python.</p>
     <div class="row">
       <button class="small" id="expJson" type="button">Backup (JSON)</button>
@@ -500,7 +699,9 @@ function renderStats() {
       <div class="row"><button class="small primary" id="ioAction" type="button">Copy</button><button class="small" id="ioDownload" type="button">Download file</button><span class="toast" id="ioToast" role="status"></span></div>
     </div>
   </div>`;
-  $("#npd").onchange = e => { S.settings.newPerDay = +e.target.value; save(); buildQueue(); current = queue[0] || null; flipped = false; };
+  const pb = $("#practiceBtn"); if (pb) pb.onclick = startPractice;
+  $("#npd").onchange = e => { S.settings.newPerDay = +e.target.value; save(); buildQueue(); next(); };
+  $("#cap").onchange = e => { S.settings.reviewCap = +e.target.value; save(); buildQueue(); next(); };
   const box = $("#ioBox"), io = $("#io"), act = $("#ioAction"), dl = $("#ioDownload"), toast = $("#ioToast");
   let file = null;
   function show(label, text, name, mode) {
@@ -509,14 +710,14 @@ function renderStats() {
   }
   $("#expJson").onclick = () => show("Backup", JSON.stringify(S), "daily-deck-backup.json", "export");
   $("#expCsv").onclick = () => {
-    const rows = ["timestamp,date,card_id,english,grade,was_new,interval_before,interval_after"].concat(
-      S.log.map(l => { const c = byId(l.id); return [new Date(l.t).toISOString(), dayKey(l.t), l.id, '"' + (c ? c.en : "").replace(/"/g, '""') + '"', l.g, l.wasNew ? 1 : 0, l.before, l.after].join(","); }));
+    const rows = ["timestamp,date,card_id,direction,english,grade,was_new,practice,interval_before,interval_after"].concat(
+      S.log.map(l => { const c = byId(l.id); return [new Date(l.t).toISOString(), dayKey(l.t), l.id, l.dir || "r", '"' + (c ? c.en : "").replace(/"/g, '""') + '"', l.g, l.wasNew ? 1 : 0, l.practice ? 1 : 0, l.before ?? "", l.after ?? ""].join(","); }));
     show("Review log", rows.join("\n"), "daily-deck-log.csv", "export");
   };
   $("#impBtn").onclick = () => show("Paste a backup here", "", null, "import");
   act.onclick = () => {
     if (act.dataset.mode === "import") {
-      try { const d = JSON.parse(io.value); if (!Array.isArray(d.cards)) throw 0; S = d; save(); buildQueue(); current = queue[0] || null; toast.textContent = "Backup restored."; renderStats(); }
+      try { const d = JSON.parse(io.value); if (!Array.isArray(d.cards)) throw 0; S = d; normalize(); save(); buildQueue(); next(); toast.textContent = "Backup restored."; renderStats(); }
       catch (e) { toast.textContent = "This text is not a Daily Deck backup. Paste the full JSON you copied."; }
       return;
     }
@@ -530,13 +731,19 @@ function renderStats() {
   };
 }
 
+function sideStatus(c, dir) {
+  const s = side(c, dir);
+  if (!s.introduced) return [dir === "p" && !unlocked(c) ? "locked" : "new", ""];
+  if (s.interval >= MASTERED) return ["mastered", "mastered"];
+  return ["in " + fmtInterval(Math.max(0, Math.round((s.due - dayStart()) / DAY))), s.lapses >= LEECH ? "leechpill" : "learning"];
+}
 function renderLibrary() {
   const q = $("#search").value.trim().toLowerCase();
   const items = S.cards.filter(c => !q || (c.en + " " + c.fr).toLowerCase().includes(q));
   $("#list").innerHTML = items.length ? items.map(c => {
-    const st = !c.introduced ? ["new", ""] : c.interval >= MASTERED ? ["mastered", "mastered"] : ["next in " + fmtInterval(Math.max(0, Math.round((c.due - dayStart()) / DAY))), "learning"];
+    const pills = ["r", "p"].map(dir => { const [t, cls] = sideStatus(c, dir); return `<span class="pill ${cls}">${DIRS[dir]} ${t}</span>`; }).join("");
     return `<div class="item"><span class="en">${esc(c.en)}</span><span class="fr2">${esc(c.fr)}</span>
-      <span class="st"><span class="pill ${st[1]}">${st[0]}</span></span></div>`;
+      <span class="st">${pills}</span></div>`;
   }).join("") : `<p class="muted">No card matches “${esc(q)}”.</p>`;
 }
 
@@ -546,7 +753,7 @@ $("#search").oninput = renderLibrary;
 function go(tab) {
   document.querySelectorAll("[data-view]").forEach(s => s.hidden = s.id !== "view-" + tab);
   document.querySelectorAll("[data-tab]").forEach(b => b.dataset.tab === tab ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
-  if (tab === "review") { if (!current) { buildQueue(); current = queue[0] || null; } renderReview(); }
+  if (tab === "review") { if (!current && !practiceDone) { buildQueue(); next(); } renderReview(); }
   if (tab === "stats") renderStats();
   if (tab === "library") renderLibrary();
   window.scrollTo(0, 0);
@@ -556,11 +763,11 @@ document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => go(b.data
 // Keyboard: space shows the answer, 1-4 grade the card
 document.addEventListener("keydown", e => {
   if ($("#view-review").hidden || /input|textarea|select/i.test(e.target.tagName)) return;
-  if (!flipped && (e.key === " " || e.key === "Enter") && current) { e.preventDefault(); flipped = true; renderReview(); }
+  if (!flipped && (e.key === " " || e.key === "Enter") && current) { e.preventDefault(); $("#showBtn").click(); }
   else if (flipped && "1234".includes(e.key)) grade(+e.key - 1);
 });
 
-load(); buildQueue(); current = queue[0] || null; renderReview();
+load(); buildQueue(); next(); renderReview();
 try { if ("serviceWorker" in navigator && location.protocol === "https:" && !location.hostname.endsWith("claude.ai")) navigator.serviceWorker.register("sw.js").catch(() => {}); } catch (e) {}
 </script>
 
