@@ -74,11 +74,13 @@ button.link { border: 0; background: none; color: var(--accent); padding: 4px 0;
 .show { width: 100%; padding: 16px; font-size: 1.05rem; }
 .grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .grades button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 4px; background: var(--surface); }
-.grades button small { font-weight: 400; font-size: 0.78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-.g0 { color: var(--again) !important; }
-.g1 { color: var(--hard) !important; }
-.g2 { color: var(--good) !important; }
-.g3 { color: var(--easy) !important; }
+.grades button small { font-weight: 400; font-size: 0.78rem; opacity: 0.85; font-variant-numeric: tabular-nums; }
+/* Anki-style grade colours: dark red, light red, light green, dark green */
+.grades .g0 { background: #9B3B2B; border-color: #9B3B2B; color: #FFF; }
+.grades .g1 { background: #F3DAD3; border-color: #E6BFB4; color: #8A3627; }
+.grades .g2 { background: #DDE9D5; border-color: #C3D8B6; color: #355E33; }
+.grades .g3 { background: #3E6B3B; border-color: #3E6B3B; color: #FFF; }
+.verdict.g0 { color: #9B3B2B; } .verdict.g1 { color: #B5523E; } .verdict.g2 { color: #4E7A4C; } .verdict.g3 { color: #3E6B3B; }
 
 .done { text-align: center; padding: 44px 20px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
 .done .big { font-family: var(--display); font-size: 2.2rem; font-weight: 500; color: var(--accent); line-height: 1.1; }
@@ -149,7 +151,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
 .yours .label { margin-right: 6px; }
 .en-ans { font-family: var(--display); font-weight: 500; font-size: 1.5rem; line-height: 1.25; overflow-wrap: anywhere; }
 .en-ans mark { background: none; color: var(--again); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
-.grades button.suggest { border: 2px solid currentColor; }
+.grades button.suggest { outline: 3px solid var(--ink); outline-offset: 2px; }
 .leech { color: var(--again); font-style: normal; font-weight: 600; }
 .item .st { flex-direction: column; align-items: flex-end; justify-content: center; gap: 4px; }
 .pill.leechpill { color: var(--again); border-color: var(--again); }
@@ -1044,11 +1046,11 @@ function renderReview() {
     actions = `<div class="pair"><button class="giveup" id="giveUp" type="button">I give up</button><button class="primary show" id="showBtn">Check</button></div>`;
   } else { // result, graded by the app
     const g = autoGrade(), [gName, gWhy] = GRADES[g];
-    const nxt = practice ? "" : ` · back ${fmtDays(nextState(s, g, elapsedDays(s)).interval)}`;
+    const previews = [0, 1, 2, 3].map(x => short(nextState(s, x, elapsedDays(s)).interval));
     const others = (c.alts || []).length ? `<div class="muted alts">Also accepted: ${c.alts.map(esc).join(", ")}</div>` : "";
     body = `<div class="front fr-front muted-front">${esc(c.fr)}</div>
       <div class="back">
-        <div class="verdict g${g}"><b>${gName}</b> · ${gWhy}${nxt}</div>
+        <div class="verdict g${g}">${gWhy} · suggested: <b>${gName}</b></div>
         ${typed.trim() && !gaveUp ? `<div class="yours"><span class="label">You typed</span> ${esc(typed)}</div>` : ""}
         <div class="en-ans">${typed.trim() && !gaveUp ? diff(typed, c.en) : esc(c.en)}</div>
         ${others}
@@ -1056,7 +1058,7 @@ function renderReview() {
         <button class="small listen" id="listen" type="button">Listen</button>
         ${tools(c)}
       </div>`;
-    actions = `<button class="primary show" id="nextBtn" type="button">Next</button>`;
+    actions = `<div class="grades">${GRADES.map(([n], x) => `<button class="g${x}${x === g ? " suggest" : ""}" data-g="${x}">${n}<small>${practice ? "" : previews[x]}</small></button>`).join("")}</div>`;
   }
 
   v.innerHTML = notes.map(n => `<div class="notice" role="status">${n}</div>`).join("") +
@@ -1072,7 +1074,7 @@ function renderReview() {
     else $("#showBtn").onclick = () => { flipped = true; renderReview(); };
     return;
   }
-  if (flipped) { $("#nextBtn").onclick = () => grade(autoGrade()); return; }
+  if (flipped) { v.querySelectorAll("[data-g]").forEach(b => b.onclick = () => grade(+b.dataset.g)); return; }
   const ans = $("#ans");
   const reveal = () => { typed = ans.value; verdict = check(typed, c); flipped = true; renderReview(); };
   $("#showBtn").onclick = reveal;
@@ -1167,7 +1169,7 @@ document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => go(b.data
 // Keyboard: space/Enter shows the answer or goes on, 1-4 grade an Expressions card
 document.addEventListener("keydown", e => {
   if ($("#view-review").hidden || /input|textarea|select/i.test(e.target.tagName)) return;
-  if (e.key === " " || e.key === "Enter") { const b = $("#nextBtn") || $("#showBtn"); if (b) { e.preventDefault(); b.click(); } }
+  if (e.key === " " || e.key === "Enter") { const b = $(".grades .suggest") || $("#showBtn"); if (b) { e.preventDefault(); b.click(); } }
   else if (flipped && "1234".includes(e.key) && $("[data-g]")) grade(+e.key - 1);
 });
 

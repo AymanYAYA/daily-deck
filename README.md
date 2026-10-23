@@ -15,9 +15,9 @@ Moving from French to English at work. Generic vocabulary apps don't target what
 | Verbs | The French verb is shown, you type the English (*partir → to leave*) | 150 most used English verbs |
 | Expressions | Everyday and work expressions, both ways | 299 |
 
-**Graded by the app, not by you.** You type your answer; the app grades it:
+**Anki-style buttons.** You type your answer, the app checks it and highlights a suggested grade; you tap the one you want:
 
-| Grade | Meaning | Comes back |
+| Button (suggested by the app, you choose) | Meaning | Comes back |
 |---|---|---|
 | Easy | Found on your own | after a long gap |
 | Good | Found with the hint (first letter of each word) | after a medium gap |
