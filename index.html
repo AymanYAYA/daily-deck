@@ -374,7 +374,16 @@ function load() {
   });
   if (merged) save();
 }
-function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+// Browsers give each site about 5 MB. Keep the detailed log for 180 days; older days are kept as a simple count per day.
+const KEEP_DAYS = 180;
+function compact() {
+  const limit = dayStart() - KEEP_DAYS * DAY;
+  if (!S.log.length || S.log[0].t >= limit) return;
+  S.days = S.days || {};
+  S.log.forEach(l => { if (l.t < limit && !l.practice) S.days[dayKey(l.t)] = (S.days[dayKey(l.t)] || 0) + 1; });
+  S.log = S.log.filter(l => l.t >= limit);
+}
+function save() { try { compact(); localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
 
 // ---------- Dates ----------
 function dayStart(t = Date.now()) { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); }
@@ -461,7 +470,7 @@ function grade(g) {
     const before = s.interval;
     Object.assign(s, nextState(s, g, elapsed));
     s.due = dayStart() + s.interval * DAY;
-    S.log.push({ t: Date.now(), id: c.id, dir, g, wasNew, before, after: s.interval, typed: verdict ? verdict.label : undefined });
+    S.log.push({ t: Date.now(), id: c.id, dir, g, wasNew, before, after: s.interval });
   }
   queue.shift();
   if (g === 0) queue.splice(Math.min(3, queue.length), 0, current); // see it again a few cards later
@@ -513,21 +522,6 @@ const hintOf = t => t.split(" ").map(w => w.replace(/(^[^A-Za-z]*[A-Za-z])|[A-Za
 // ---------- Speech ----------
 function speak(text) {
   try { const u = new SpeechSynthesisUtterance(text.replace("…", "")); u.lang = "en-GB"; u.rate = 0.95; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) {}
-}
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-function dictate(btn, input, expected) {
-  try {
-    const r = new SR(); r.lang = "en-GB"; r.interimResults = false; r.maxAlternatives = 3;
-    btn.textContent = "Listening…"; btn.disabled = true;
-    r.onresult = e => {
-      const alts = [...e.results[0]].map(x => x.transcript);
-      input.value = alts.sort((a, b) => similarity(b, expected) - similarity(a, expected))[0] || "";
-      input.focus();
-    };
-    r.onerror = () => { btn.textContent = "Mic unavailable"; };
-    r.onend = () => { btn.disabled = false; if (btn.textContent === "Listening…") btn.textContent = "Speak"; };
-    r.start();
-  } catch (e) { btn.textContent = "Mic unavailable"; }
 }
 
 // ---------- Rendering ----------
@@ -588,7 +582,6 @@ function renderReview() {
         <label for="ans" class="sr">Your answer in English</label>
         <input id="ans" type="text" placeholder="Type it in English" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" value="${esc(typed)}">
         <div class="row">
-          ${SR ? `<button class="small" id="mic" type="button">Speak</button>` : ""}
           ${hint ? "" : `<button class="small" id="hintBtn" type="button">Hint</button>`}
         </div>
       </div>`;
@@ -624,7 +617,6 @@ function renderReview() {
     ans.oninput = () => { typed = ans.value; };
     ans.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); reveal(); } };
     const h = $("#hintBtn"); if (h) h.onclick = () => { typed = ans.value; hint = true; renderReview(); };
-    const m = $("#mic"); if (m) m.onclick = () => dictate(m, ans, c.en);
     if (matchMedia("(pointer: fine)").matches) ans.focus();
   }
 }
@@ -641,7 +633,7 @@ function renderStats() {
   const goal = 1000;
   const learning = S.cards.filter(c => c.introduced).length - mastered;
   // streak: consecutive days with at least one review, ending today or yesterday
-  const days = new Set(S.log.filter(l => !l.practice).map(l => dayKey(l.t)));
+  const days = new Set([...Object.keys(S.days || {}), ...S.log.filter(l => !l.practice).map(l => dayKey(l.t))]);
   let streak = 0, t = Date.now();
   if (!days.has(dayKey(t))) t -= DAY;
   while (days.has(dayKey(t))) { streak++; t -= DAY; }
