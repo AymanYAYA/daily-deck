@@ -166,6 +166,9 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
 .goal.won .label { color: var(--good); }
 .goal.won .goalbar i { background: var(--good); }
 .goal-note { margin: 0; font-size: 0.82rem; }
+.tools { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.88rem; padding-top: 4px; }
+.tools a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.tools .link { font-size: 0.88rem; color: var(--muted); font-weight: 400; }
 .help { font-size: 0.8rem; font-weight: 400; }
 .chip { font-size: 0.8rem; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; background: var(--surface); white-space: nowrap; }
 .fx { position: fixed; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translate(-50%, -12px); opacity: 0; pointer-events: none; z-index: 20;
@@ -438,7 +441,7 @@ function normalize() {
   S.settings = Object.assign({ newPerDay: 10, reviewCap: 80 }, S.settings || {});
   S.intro = S.intro || {}; S.introP = S.introP || {}; S.log = S.log || [];
   S.cards.forEach(c => { if (!c.p) c.p = blank(); });
-  S.goal = S.goal || {};
+  S.goal = S.goal || {}; S.flags = S.flags || {};
 }
 let merged = 0;
 function load() {
@@ -628,6 +631,15 @@ function renderStrip() {
     </div>
     <p class="muted goal-note">${won ? "Anything more today is bonus." : `Today's reviews plus ${S.settings.newPerDay} new cards (change it in Progress → Settings).`} ${st ? `${st}-day streak.` : ""}</p>`;
 }
+// Verification: see the phrase in real sentences translated by people (Reverso Context), and flag anything that looks wrong.
+function checkUrl(c) {
+  const q = c.en.replace(/\s*\([^)]*\)/g, "").replace(/…/g, "").replace(/[,.?!]+$/g, "").trim();
+  return "https://context.reverso.net/traduction/anglais-francais/" + encodeURIComponent(q).replace(/%20/g, "+");
+}
+function tools(c) {
+  return `<div class="tools"><a href="${checkUrl(c)}" target="_blank" rel="noopener">Check in real sentences ↗</a>
+    <button class="link" id="flag" type="button">${S.flags[c.id] ? "Flagged ✓" : "Flag as doubtful"}</button></div>`;
+}
 function renderCounts() {
   renderStrip();
   if (practice) { $("#counts").innerHTML = `<span>Practice <b>${queue.length}</b></span>`; return; }
@@ -684,7 +696,7 @@ function renderReview() {
   if (!say) {
     body = `<div class="front">${esc(c.en)}</div>
       <button class="small listen" id="listen" type="button">Listen</button>
-      ${flipped ? `<div class="back"><div class="fr">${esc(c.fr)}</div>${c.ex ? `<div class="ex">“${esc(c.ex)}”</div>` : ""}</div>`
+      ${flipped ? `<div class="back"><div class="fr">${esc(c.fr)}</div>${c.ex ? `<div class="ex">“${esc(c.ex)}”</div>` : ""}${tools(c)}</div>`
         : `<div class="spacer"></div><p class="muted" style="margin:0;font-size:.9rem">Say what it means, out loud if you can, then check.</p>`}`;
   } else if (!flipped) {
     body = `<div class="front fr-front">${esc(c.fr)}</div>
@@ -705,6 +717,7 @@ function renderReview() {
         <div class="en-ans">${typed.trim() ? diff(typed, c.en) : esc(c.en)}</div>
         ${c.ex ? `<div class="ex">“${esc(c.ex)}”</div>` : ""}
         <button class="small listen" id="listen" type="button">Listen</button>
+        ${tools(c)}
       </div>`;
   }
 
@@ -718,6 +731,7 @@ function renderReview() {
     </div>` : `<button class="primary show" id="showBtn">${say ? "Check" : "Show answer"}</button>`}`;
 
   const L = $("#listen"); if (L) L.onclick = () => speak(c.en);
+  const F = $("#flag"); if (F) F.onclick = () => { S.flags[c.id] ? delete S.flags[c.id] : (S.flags[c.id] = Date.now()); save(); F.textContent = S.flags[c.id] ? "Flagged ✓" : "Flag as doubtful"; };
   if (flipped) { v.querySelectorAll("[data-g]").forEach(b => b.onclick = () => grade(+b.dataset.g)); return; }
   const reveal = () => {
     if (say) { typed = $("#ans").value; verdict = check(typed, c.en); }
@@ -784,6 +798,12 @@ function renderStats() {
     </div>
     <div class="chart"><span class="label">Reviews per day</span>${svg}</div>
   </div>
+  ${Object.keys(S.flags).length ? `<div class="panel">
+    <h2>Flagged cards</h2>
+    <p class="muted" style="margin:0;font-size:.85rem">Cards you marked as doubtful. Copy the list and send it to Claude to check and fix.</p>
+    <div class="list">${Object.keys(S.flags).map(byId).filter(Boolean).map(c => `<div class="item"><span class="en">${esc(c.en)}</span><span class="fr2">${esc(c.fr)}</span></div>`).join("")}</div>
+    <div class="row"><button class="small" id="copyFlags" type="button">Copy the list</button><span class="toast" id="flagToast" role="status"></span></div>
+  </div>` : ""}
   <div class="panel">
     <h2>Hardest cards</h2>
     <p class="muted" style="margin:0;font-size:.85rem">Cards you answered <em>Again</em> twice or more. Drill them here.</p>
@@ -810,6 +830,11 @@ function renderStats() {
     </div>
   </div>`;
   const pb = $("#practiceBtn"); if (pb) pb.onclick = startPractice;
+  const cf = $("#copyFlags");
+  if (cf) cf.onclick = () => {
+    const txt = "Daily Deck – flagged cards:\n" + Object.keys(S.flags).map(byId).filter(Boolean).map(c => `- ${c.en} = ${c.fr} (${c.ex})`).join("\n");
+    try { navigator.clipboard.writeText(txt).then(() => $("#flagToast").textContent = "Copied. Paste it to Claude."); } catch (e) { $("#flagToast").textContent = "Copy blocked here."; }
+  };
   $("#npd").onchange = e => { S.settings.newPerDay = +e.target.value; save(); buildQueue(); next(); };
   $("#cap").onchange = e => { S.settings.reviewCap = +e.target.value; save(); buildQueue(); next(); };
   const box = $("#ioBox"), io = $("#io"), act = $("#ioAction"), dl = $("#ioDownload"), toast = $("#ioToast");
