@@ -19,12 +19,12 @@ Moving from French to English at work. Generic vocabulary apps don't target what
 
 | Button (suggested by the app, you choose) | Meaning | Comes back |
 |---|---|---|
-| Easy | Found on your own | after a long gap |
-| Good | Found with the hint (first letter of each word) | after a medium gap |
-| Hard | Almost: one typo or a missing word | soon |
-| Again | Wrong, or "I give up" | tomorrow, and again a few cards later |
+| Easy | Found on your own | 4 days the first time |
+| Good | Found with the hint (first letter of each word) | 2 days the first time |
+| Hard | Almost: one typo or a missing word | 1 day the first time |
+| Again | Wrong, or "I give up" | a few cards later, then tomorrow |
 
-**Spaced repetition (SM-2, the algorithm behind Anki).** Cards you know come back after longer and longer gaps (1 day, 3 days, a week, three weeks…). Coming back late but still remembering earns credit for the extra time. Reviews are capped per day and the most urgent come first, so missed days never snowball.
+**Spaced repetition (SM-2, the algorithm behind Anki).** Each button always gives a different gap, and the gaps grow with every success: after that, Hard ≈ gap × 1.2, Good ≈ gap × 2.3, Easy ≈ gap × 3. With Good every time, a card comes back after 2, 5, 12, 28, then 64 days. Coming back late but still remembering earns credit for the extra time. Reviews are capped per day and the most urgent come first, so missed days never snowball.
 
 **Levels.** Each deck climbs a consulting ladder: Intern, Analyst, Consultant, Manager, Partner. A card is *solid* when its next review is a week or more away; when every card of a level is solid, the next level opens. Earlier levels keep coming back in reviews, so the base is never lost. *Mastered* means the next review is three weeks or more away.
 
@@ -36,4 +36,4 @@ Moving from French to English at work. Generic vocabulary apps don't target what
 A single-file web app that runs in any browser, on phone or desktop, with no install and no account: two decks, automatic grading, levels, hardest-cards practice, and two settings (new cards per day, maximum reviews per day).
 
 ## Tech
-One self-contained `index.html` (HTML, CSS, vanilla JavaScript). Progress is stored locally in the browser (`localStorage`). Built with Claude.
+Three files, no framework: `index.html` (page and styles), `app.js` (logic: scheduling, answer checking, screens), `decks.js` (card data). Progress is stored locally in the browser (`localStorage`). Built with Claude.
