@@ -2,7 +2,6 @@
 // ---------- Decks ----------
 const DECKS = {
   verbs: { name: "Verbs", about: "French verb → English verb" },
-  expr: { name: "Expressions", about: "Everyday and work expressions, both ways" },
 };
 // Levels: same ladder for every deck. A level with no cards yet shows as "soon".
 const LEVELS = ["Intern", "Analyst", "Consultant", "Manager", "Partner"];
@@ -19,7 +18,7 @@ let S;
 function blank() { return { introduced: null, due: 0, interval: 0, ease: 2.3, reps: 0, lapses: 0 }; }
 function makeExpr(d, i) { return { id: "d" + (i + 1), deck: "expr", en: d[0], alts: [], fr: d[1], ex: d[2], tag: d[3], level: d[4] || TAG_LEVEL[d[3]] || "Intern", ...blank(), p: blank() }; }
 function makeVerb(d, i) { return { id: "v" + (i + 1), deck: "verbs", fr: d[0], en: d[1], alts: d[2] || [], ex: d[3], tag: "Verbs", level: d[4] || "Intern", ...blank(), p: blank() }; }
-function allMade() { return [...DECK.map(makeExpr), ...VERBS.map(makeVerb)]; }
+function allMade() { return VERBS.map(makeVerb); } // add new decks here
 function fresh() { return { cards: allMade(), log: [], settings: {}, intro: {}, goal: {}, flags: {}, level: {}, deck: "verbs" }; }
 function normalize() {
   S.settings = Object.assign({ newPerDay: 10, reviewCap: 80 }, S.settings || {});
@@ -33,8 +32,12 @@ function load() {
   if (!S || !Array.isArray(S.cards)) S = fresh();
   normalize();
   // Text, level and accepted answers always come from the deck: a corrected card is fixed and keeps its progress.
+  // Cards and history of decks that no longer exist are dropped.
+  const made = allMade(), ids = new Set(made.map(m => m.id));
+  S.cards = S.cards.filter(c => ids.has(c.id));
+  S.log = S.log.filter(l => DECKS[l.deck]);
   const have = new Map(S.cards.map(c => [c.id, c]));
-  allMade().forEach(m => {
+  made.forEach(m => {
     const c = have.get(m.id);
     if (c) { c.en = m.en; c.fr = m.fr; c.ex = m.ex; c.tag = m.tag; c.level = m.level; c.alts = m.alts; c.deck = m.deck; delete c.asked; }
     else S.cards.push(m);
@@ -256,6 +259,7 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 
 function renderDecks() {
+  $("#decks").hidden = Object.keys(DECKS).length < 2; // the switcher only shows when there is a choice
   $("#decks").innerHTML = Object.entries(DECKS).map(([id, d]) =>
     `<button type="button" role="tab" data-deck="${id}" aria-selected="${id === D()}">${d.name} <span>${deckCards(id).length}</span></button>`).join("");
   document.querySelectorAll("[data-deck]").forEach(b => b.onclick = () => {

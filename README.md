@@ -8,12 +8,11 @@ A small spaced-repetition flashcard app (Anki-style) to build English, one short
 Moving from French to English at work. Generic vocabulary apps don't target what I actually need, and most flashcard apps only train you to *recognise* a word, not to *produce* it when you need it. I also wanted to stay in control: choose what I train, and understand exactly how each card is graded.
 
 ## Method
-**Decks you choose.** Each deck is a separate topic with its own progress:
+**Decks.** Each deck is a separate topic with its own progress. The app is built for several decks; the first one is:
 
 | Deck | What you do | Cards |
 |---|---|---|
 | Verbs | The French verb is shown, you type the English (*partir → to leave*) | 150 most used English verbs |
-| Expressions | Everyday and work expressions, both ways | 299 |
 
 **Anki-style buttons.** You type your answer, the app checks it and highlights a suggested grade; you tap the one you want:
 
@@ -33,7 +32,7 @@ Moving from French to English at work. Generic vocabulary apps don't target what
 **Verification.** Every card links to Reverso Context to see the phrase in real sentences translated by people. Doubtful cards can be flagged and the list copied for correction. Card text always comes from the deck file, so a corrected card is fixed without losing progress.
 
 ## Result
-A single-file web app that runs in any browser, on phone or desktop, with no install and no account: two decks, automatic grading, levels, hardest-cards practice, extra practice once the day is done (it never changes the schedule), and two settings (new cards per day up to 50, maximum reviews per day up to 300).
+A single-file web app that runs in any browser, on phone or desktop, with no install and no account: a verbs deck, automatic grading, levels, hardest-cards practice, extra practice once the day is done (it never changes the schedule), and two settings (new cards per day up to 50, maximum reviews per day up to 300).
 
 ## Tech
 Three files, no framework: `index.html` (page and styles), `app.js` (logic: scheduling, answer checking, screens), `decks.js` (card data). Progress is stored locally in the browser (`localStorage`). Built with Claude.
