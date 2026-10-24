@@ -99,7 +99,7 @@ const short = d => d < 30 ? d + "d" : d < 365 ? Math.round(d / 30) + "mo" : (d /
 const gapLabel = (g, d) => g === 0 ? "now" : short(d);
 
 // ---------- Queue ----------
-let queue = [], current = null, flipped = false, sessionDone = 0, backlog = 0, practice = false, practiceDone = false;
+let queue = [], current = null, flipped = false, sessionDone = 0, backlog = 0, practice = false, practiceDone = false, practiceKind = "";
 let typed = "", verdict = null, hint = false, gaveUp = false;
 const D = () => S.deck;
 const goalKey = () => D() + "|" + dayKey();
@@ -135,8 +135,17 @@ function hardest(d = D()) {
 }
 function startPractice() { // replay the hardest cards without changing their schedule
   queue = hardest().slice(0, 10).map(x => x.c.id + "|" + x.dir);
-  practice = true; practiceDone = false; next(); go("review");
+  practice = true; practiceKind = "hard"; practiceDone = false; next(); go("review");
 }
+// Keep going after the day is done: replay cards you've already seen, the ones coming back soonest first.
+// It does not move their next review, so the spacing that makes memory stick stays intact.
+function startExtra() {
+  const seen = [];
+  deckCards(D()).forEach(c => sidesOf(c).forEach(dir => { const s = side(c, dir); if (s.introduced) seen.push({ q: c.id + "|" + dir, due: s.due }); }));
+  queue = seen.sort((a, b) => a.due - b.due).slice(0, 20).map(x => x.q);
+  practice = true; practiceKind = "extra"; practiceDone = false; next(); go("review");
+}
+const seenCount = () => deckCards(D()).filter(c => sidesOf(c).some(dir => side(c, dir).introduced)).length;
 function next() { current = queue[0] || null; flipped = false; typed = ""; verdict = null; hint = false; gaveUp = false; }
 
 // Say it cards are graded by the app, not by you:
@@ -311,10 +320,14 @@ function renderDone(v) {
     </div>
     <p class="muted" style="margin:0;font-size:.9rem">${tomorrow} card${tomorrow === 1 ? "" : "s"} due tomorrow.</p>
     ${backlog ? `<p class="muted" style="margin:0">${backlog} older review${backlog > 1 ? "s" : ""} will wait for tomorrow, so the daily load stays light.</p>` : ""}
-    ${canMore ? `<button class="primary" id="moreNew" type="button">5 more new cards</button>` :
+    ${canMore ? `<button class="primary" id="moreNew" type="button">10 more new cards</button>` : ""}
+    ${seenCount() ? `<button class="small" id="extraBtn" type="button">Keep reviewing cards I've seen</button>
+      <p class="muted" style="margin:0;font-size:.82rem">Up to 20 cards, soonest first. Extra practice: it does not change when they come back.</p>` : ""}
+    ${canMore ? "" :
       !backlog ? `<p class="muted" style="margin:0;font-size:.9rem">${lv && levelCards(D(), lv).length ? `Every card of ${lv} is started. The level closes when each card is solid (next review a week or more away).` : "The next level's cards are being written."}</p>` : ""}
   </div>`;
-  if ($("#moreNew")) $("#moreNew").onclick = () => { buildQueue(5); next(); renderReview(); };
+  if ($("#moreNew")) $("#moreNew").onclick = () => { buildQueue(10); next(); renderReview(); };
+  if ($("#extraBtn")) $("#extraBtn").onclick = startExtra;
 }
 
 function renderReview() {
@@ -325,7 +338,7 @@ function renderReview() {
   const s = side(c, dir), say = dir === "p";
   const notes = [];
   if (backlog && !practice && reviewsToday() === 0) notes.push(`You were away for a bit. Today is capped at ${S.settings.reviewCap} reviews, most urgent first; new cards are paused until you catch up.`);
-  if (practice) notes.push("Practice: your hardest cards. It does not change your schedule.");
+  if (practice) notes.push(practiceKind === "extra" ? "Extra practice on cards you've seen. It does not change your schedule." : "Practice: your hardest cards. It does not change your schedule.");
   const status = !s.introduced ? "new" : s.interval >= MASTERED ? "mastered" : "learning";
   const label = c.deck === "verbs" ? "Verb" : `${esc(c.tag)} · ${say ? "Say it" : "Understand it"}`;
   let body, actions;
@@ -445,9 +458,9 @@ function renderStats() {
   <div class="panel">
     <h2>Settings</h2>
     <div class="field"><label for="npd">New cards per day</label><span class="muted help">Sets your daily goal. More = faster progress, but more reviews in the following days.</span>
-      <select id="npd">${[5, 10, 15, 20, 30].map(n => `<option ${n === S.settings.newPerDay ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+      <select id="npd">${[5, 10, 15, 20, 30, 40, 50].map(n => `<option ${n === S.settings.newPerDay ? "selected" : ""}>${n}</option>`).join("")}</select></div>
     <div class="field"><label for="cap">Maximum reviews per day</label><span class="muted help">A ceiling, so a few missed days never turn into a mountain.</span>
-      <select id="cap">${[40, 60, 80, 120, 200].map(n => `<option ${n === S.settings.reviewCap ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+      <select id="cap">${[40, 60, 80, 120, 200, 300].map(n => `<option ${n === S.settings.reviewCap ? "selected" : ""}>${n}</option>`).join("")}</select></div>
   </div>`;
   const pb = $("#practiceBtn"); if (pb) pb.onclick = startPractice;
   const cf = $("#copyFlags");

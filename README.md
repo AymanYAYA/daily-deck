@@ -33,7 +33,7 @@ Moving from French to English at work. Generic vocabulary apps don't target what
 **Verification.** Every card links to Reverso Context to see the phrase in real sentences translated by people. Doubtful cards can be flagged and the list copied for correction. Card text always comes from the deck file, so a corrected card is fixed without losing progress.
 
 ## Result
-A single-file web app that runs in any browser, on phone or desktop, with no install and no account: two decks, automatic grading, levels, hardest-cards practice, and two settings (new cards per day, maximum reviews per day).
+A single-file web app that runs in any browser, on phone or desktop, with no install and no account: two decks, automatic grading, levels, hardest-cards practice, extra practice once the day is done (it never changes the schedule), and two settings (new cards per day up to 50, maximum reviews per day up to 300).
 
 ## Tech
 Three files, no framework: `index.html` (page and styles), `app.js` (logic: scheduling, answer checking, screens), `decks.js` (card data). Progress is stored locally in the browser (`localStorage`). Built with Claude.
