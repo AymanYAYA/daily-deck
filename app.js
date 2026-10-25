@@ -17,7 +17,13 @@ let S;
 
 function blank() { return { introduced: null, due: 0, interval: 0, ease: 2.3, reps: 0, lapses: 0 }; }
 function makeExpr(d, i) { return { id: "d" + (i + 1), deck: "expr", en: d[0], alts: [], fr: d[1], ex: d[2], tag: d[3], level: d[4] || TAG_LEVEL[d[3]] || "Intern", ...blank(), p: blank() }; }
-function makeVerb(d, i) { return { id: "v" + (i + 1), deck: "verbs", fr: d[0], en: d[1], alts: d[2] || [], ex: d[3], tag: "Verbs", level: d[4] || "Intern", ...blank(), p: blank() }; }
+// Kinds: none = French verb → English verb · "Simple past" / "Past participle" = give that form · "Sentence" = fill in the blank
+function makeVerb(d, i) {
+  const kind = d[5] || "", c = { id: "v" + (i + 1), deck: "verbs", fr: d[0], en: d[1], alts: d[2] || [], ex: d[3], tag: "Verbs", level: d[4] || "Intern", kind, ...blank(), p: blank() };
+  if (kind === "Sentence") { c.trans = d[3]; c.ex = d[0].replace(/___\s*\([^)]*\)/, d[1]); }
+  return c;
+}
+const KIND_LABEL = { "": "Verb", "Simple past": "Irregular verb", "Past participle": "Irregular verb", Sentence: "Fill in the verb" };
 function allMade() { return VERBS.map(makeVerb); } // add new decks here
 function fresh() { return { cards: allMade(), log: [], settings: {}, intro: {}, goal: {}, flags: {}, level: {}, deck: "verbs" }; }
 function normalize() {
@@ -39,7 +45,7 @@ function load() {
   const have = new Map(S.cards.map(c => [c.id, c]));
   made.forEach(m => {
     const c = have.get(m.id);
-    if (c) { c.en = m.en; c.fr = m.fr; c.ex = m.ex; c.tag = m.tag; c.level = m.level; c.alts = m.alts; c.deck = m.deck; delete c.asked; }
+    if (c) { Object.assign(c, { en: m.en, fr: m.fr, ex: m.ex, tag: m.tag, level: m.level, alts: m.alts, deck: m.deck, kind: m.kind, trans: m.trans }); delete c.asked; }
     else S.cards.push(m);
   });
   Object.keys(DECKS).forEach(d => { if (S.level[d] === undefined) S.level[d] = currentLevel(d); });
@@ -68,7 +74,10 @@ const sidesOf = c => c.deck === "verbs" ? ["p"] : ["r", "p"];
 const deckCards = d => S.cards.filter(c => c.deck === d);
 const levelCards = (d, name) => deckCards(d).filter(c => c.level === name);
 const isMastered = c => sidesOf(c).every(dir => side(c, dir).interval >= MASTERED);
-const isSolid = c => sidesOf(c).every(dir => side(c, dir).interval >= SOLID);
+// Irregular verbs are what you hesitate on most: their cards must hold two weeks, not one, before the level closes.
+const SOLID_BY_LEVEL = { Analyst: 14 };
+const solidDays = level => SOLID_BY_LEVEL[level] || SOLID;
+const isSolid = c => sidesOf(c).every(dir => side(c, dir).interval >= solidDays(c.level));
 const unlocked = c => c.deck === "verbs" || (!!c.introduced && c.interval >= UNLOCK);
 function currentLevel(d) { // first level not closed yet; a level without cards stops the climb
   for (let i = 0; i < LEVELS.length; i++) { const cs = levelCards(d, LEVELS[i]); if (!cs.length || !cs.every(isSolid)) return i; }
@@ -334,6 +343,12 @@ function renderDone(v) {
   if ($("#extraBtn")) $("#extraBtn").onclick = startExtra;
 }
 
+// What the question looks like, per kind of card
+const FORM_HELP = { "Simple past": "Simple past · prétérit <span>(Yesterday I …)</span>", "Past participle": "Past participle · participe passé <span>(I have …)</span>" };
+function front(c, faded) {
+  if (c.kind === "Sentence") return `<div class="front sentence${faded ? " muted-front" : ""}">${esc(c.fr).replace("___", '<span class="blank">_____</span>')}</div>`;
+  return `<div class="front fr-front${faded ? " muted-front" : ""}">${esc(c.fr)}</div>${FORM_HELP[c.kind] ? `<div class="form">${FORM_HELP[c.kind]}</div>` : ""}`;
+}
 function renderReview() {
   renderCounts();
   const v = $("#view-review");
@@ -344,7 +359,7 @@ function renderReview() {
   if (backlog && !practice && reviewsToday() === 0) notes.push(`You were away for a bit. Today is capped at ${S.settings.reviewCap} reviews, most urgent first; new cards are paused until you catch up.`);
   if (practice) notes.push(practiceKind === "extra" ? "Extra practice on cards you've seen. It does not change your schedule." : "Practice: your hardest cards. It does not change your schedule.");
   const status = !s.introduced ? "new" : s.interval >= MASTERED ? "mastered" : "learning";
-  const label = c.deck === "verbs" ? "Verb" : `${esc(c.tag)} · ${say ? "Say it" : "Understand it"}`;
+  const label = c.deck === "verbs" ? KIND_LABEL[c.kind || ""] : `${esc(c.tag)} · ${say ? "Say it" : "Understand it"}`;
   let body, actions;
 
   if (!say) { // Expressions, English shown: you grade yourself
@@ -356,8 +371,8 @@ function renderReview() {
     actions = flipped ? `<div class="grades">${GRADES.map(([n], g) => `<button class="g${g}" data-g="${g}">${n}<small>${practice ? "" : gapLabel(g, nextState(s, g, elapsedDays(s)).interval)}</small></button>`).join("")}</div>`
       : `<button class="primary show" id="showBtn">Show answer</button>`;
   } else if (!flipped) { // French shown: type the English
-    body = `<div class="front fr-front">${esc(c.fr)}</div>
-      ${hint ? `<div class="hint" aria-label="Hint">${esc(hintOf(c.en))}</div>` : ""}
+    body = `${front(c)}
+      ${hint ? `${c.trans ? `<div class="trans">${esc(c.trans)}</div>` : ""}<div class="hint" aria-label="Hint">${esc(hintOf(c.en))}</div>` : ""}
       <div class="spacer"></div>
       <div class="answer">
         <label for="ans" class="sr">Your answer in English</label>
@@ -369,13 +384,13 @@ function renderReview() {
     const g = autoGrade(), [gName, gWhy] = GRADES[g];
     const previews = [0, 1, 2, 3].map(x => short(nextState(s, x, elapsedDays(s)).interval));
     const others = (c.alts || []).length ? `<div class="muted alts">Also accepted: ${c.alts.map(esc).join(", ")}</div>` : "";
-    body = `<div class="front fr-front muted-front">${esc(c.fr)}</div>
+    body = `${front(c, true)}
       <div class="back">
         <div class="verdict g${g}">${gWhy} · suggested: <b>${gName}</b></div>
         ${typed.trim() && !gaveUp ? `<div class="yours"><span class="label">You typed</span> ${esc(typed)}</div>` : ""}
         <div class="en-ans">${typed.trim() && !gaveUp ? diff(typed, c.en) : esc(c.en)}</div>
         ${others}
-        ${c.ex ? `<div class="ex">“${esc(c.ex)}”</div>` : ""}
+        ${c.ex ? `<div class="ex">“${esc(c.ex)}”</div>` : ""}${c.trans ? `<div class="muted trans-back">${esc(c.trans)}</div>` : ""}
         <button class="small listen" id="listen" type="button">Listen</button>
         ${tools(c)}
       </div>`;
@@ -388,7 +403,7 @@ function renderReview() {
       ${body}
     </article>${actions}`;
 
-  const L = $("#listen"); if (L) L.onclick = () => speak(c.en);
+  const L = $("#listen"); if (L) L.onclick = () => speak(c.kind ? c.ex : c.en);
   const F = $("#flag"); if (F) F.onclick = () => { S.flags[c.id] ? delete S.flags[c.id] : (S.flags[c.id] = Date.now()); save(); F.textContent = S.flags[c.id] ? "Flagged ✓" : "Flag as doubtful"; };
   if (!say) {
     if (flipped) v.querySelectorAll("[data-g]").forEach(b => b.onclick = () => grade(+b.dataset.g));
@@ -434,7 +449,7 @@ function renderStats() {
     <span class="label">${DECKS[d].name} · level ${Math.min(li + 1, LEVELS.length)} of ${LEVELS.length}</span>
     <div class="num">${lv || "All levels closed"}</div>
     ${lv ? `<div class="bar"><i style="width:${lvCards.length ? 100 * lvSolid / lvCards.length : 0}%"></i></div>
-    <span class="muted" style="font-size:.85rem">${lvSolid} / ${lvCards.length} cards solid. A card is solid when its next review is a week or more away. When every card of the level is solid, the next level opens.</span>` : ""}
+    <span class="muted" style="font-size:.85rem">${lvSolid} / ${lvCards.length} cards solid. A card is solid when its next review is ${solidDays(lv) === 7 ? "a week" : solidDays(lv) + " days"} or more away. When every card of the level is solid, the next level opens.</span>` : ""}
     <ol class="ladder">${ladder}</ol>
   </div>
   <div class="panel kpi">

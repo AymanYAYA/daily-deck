@@ -12,7 +12,15 @@ Moving from French to English at work. Generic vocabulary apps don't target what
 
 | Deck | What you do | Cards |
 |---|---|---|
-| Verbs | The French verb is shown, you type the English (*partir → to leave*) | 150 most used English verbs |
+| Verbs | Three levels, below | 364 |
+
+| Level | What you do | Example | Cards |
+|---|---|---|---|
+| 1 · Intern | French verb → English verb | *partir* → **to leave** | 150 most used verbs |
+| 2 · Analyst | Irregular verbs: simple past and past participle, on separate cards | *to go*, simple past → **went** · past participle → **gone** | 57 verbs × 2 = 114 |
+| 3 · Consultant | Fill in the verb with the right tense (French sentence as hint) | *I ___ (live) here since 2020.* → **have lived** | 100 sentences |
+
+Level 3 trains the real trap for French speakers: choosing between simple past and present perfect (*J'ai mangé hier* = *I ate yesterday*, not *I have eaten*), plus passives, past perfect and the base form after *did*, *will* or *to*.
 
 **Anki-style buttons.** You type your answer, the app checks it and highlights a suggested grade; you tap the one you want:
 
@@ -25,7 +33,7 @@ Moving from French to English at work. Generic vocabulary apps don't target what
 
 **Spaced repetition (SM-2, the algorithm behind Anki).** Each button always gives a different gap, and the gaps grow with every success: after that, Hard ≈ gap × 1.2, Good ≈ gap × 2.3, Easy ≈ gap × 3. With Good every time, a card comes back after 2, 5, 12, 28, then 64 days. Coming back late but still remembering earns credit for the extra time. Reviews are capped per day and the most urgent come first, so missed days never snowball.
 
-**Levels.** Each deck climbs a consulting ladder: Intern, Analyst, Consultant, Manager, Partner. A card is *solid* when its next review is a week or more away; when every card of a level is solid, the next level opens. Earlier levels keep coming back in reviews, so the base is never lost. *Mastered* means the next review is three weeks or more away.
+**Levels.** Each deck climbs a consulting ladder: Intern, Analyst, Consultant, Manager, Partner. A card is *solid* when its next review is a week or more away (two weeks for irregular verbs, the hardest part); when every card of a level is solid, the next level opens. Earlier levels keep coming back in reviews, so the base is never lost. *Mastered* means the next review is three weeks or more away.
 
 **Daily goal.** Cards due today plus your new cards (set in Settings). Finish them and the day is won.
 
