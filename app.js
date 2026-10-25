@@ -20,7 +20,7 @@ function makeExpr(d, i) { return { id: "d" + (i + 1), deck: "expr", en: d[0], al
 // Kinds: none = French verb → English verb · "Simple past" / "Past participle" = give that form · "Sentence" = fill in the blank
 function makeVerb(d, i) {
   const kind = d[5] || "", c = { id: "v" + (i + 1), deck: "verbs", fr: d[0], en: d[1], alts: d[2] || [], ex: d[3], tag: "Verbs", level: d[4] || "Intern", kind, ...blank(), p: blank() };
-  if (kind === "Sentence") { c.trans = d[3]; c.ex = d[0].replace(/___\s*\([^)]*\)/, d[1]); }
+  if (kind) { c.trans = d[3]; c.ex = d[0].replace(/___\s*\([^)]*\)/, d[1]); } // d[0] has a blank, d[3] is the French sentence
   return c;
 }
 const KIND_LABEL = { "": "Verb", "Simple past": "Irregular verb", "Past participle": "Irregular verb", Sentence: "Fill in the verb" };
@@ -344,10 +344,17 @@ function renderDone(v) {
 }
 
 // What the question looks like, per kind of card
-const FORM_HELP = { "Simple past": "Simple past · prétérit <span>(Yesterday I …)</span>", "Past participle": "Past participle · participe passé <span>(I have …)</span>" };
+// Shown after the answer, so you learn when each form is used
+const FORM_HELP = {
+  "Simple past": "Simple past · prétérit <span>— used alone, often with a past time: yesterday, last week, in 2019</span>",
+  "Past participle": "Past participle · participe passé <span>— never alone: after have / has / had, or after be (is, was, been)</span>",
+};
+const blanked = t => esc(t).replace("___", '<span class="blank">_____</span>');
 function front(c, faded) {
-  if (c.kind === "Sentence") return `<div class="front sentence${faded ? " muted-front" : ""}">${esc(c.fr).replace("___", '<span class="blank">_____</span>')}</div>`;
-  return `<div class="front fr-front${faded ? " muted-front" : ""}">${esc(c.fr)}</div>${FORM_HELP[c.kind] ? `<div class="form">${FORM_HELP[c.kind]}</div>` : ""}`;
+  const f = faded ? " muted-front" : "";
+  if (c.kind === "Sentence") return `<div class="front sentence${f}">${blanked(c.fr)}</div>`;
+  if (c.kind) return `<div class="fr-line${f}">${esc(c.trans)}</div><div class="front sentence${f}">${blanked(c.fr)}</div>`; // irregular forms: French first
+  return `<div class="front fr-front${f}">${esc(c.fr)}</div>`;
 }
 function renderReview() {
   renderCounts();
@@ -372,7 +379,7 @@ function renderReview() {
       : `<button class="primary show" id="showBtn">Show answer</button>`;
   } else if (!flipped) { // French shown: type the English
     body = `${front(c)}
-      ${hint ? `${c.trans ? `<div class="trans">${esc(c.trans)}</div>` : ""}<div class="hint" aria-label="Hint">${esc(hintOf(c.en))}</div>` : ""}
+      ${hint ? `${c.kind === "Sentence" ? `<div class="trans">${esc(c.trans)}</div>` : ""}<div class="hint" aria-label="Hint">${esc(hintOf(c.en))}</div>` : ""}
       <div class="spacer"></div>
       <div class="answer">
         <label for="ans" class="sr">Your answer in English</label>
@@ -387,10 +394,11 @@ function renderReview() {
     body = `${front(c, true)}
       <div class="back">
         <div class="verdict g${g}">${gWhy} · suggested: <b>${gName}</b></div>
+        ${FORM_HELP[c.kind] ? `<div class="form">${FORM_HELP[c.kind]}</div>` : ""}
         ${typed.trim() && !gaveUp ? `<div class="yours"><span class="label">You typed</span> ${esc(typed)}</div>` : ""}
         <div class="en-ans">${typed.trim() && !gaveUp ? diff(typed, c.en) : esc(c.en)}</div>
         ${others}
-        ${c.ex ? `<div class="ex">“${esc(c.ex)}”</div>` : ""}${c.trans ? `<div class="muted trans-back">${esc(c.trans)}</div>` : ""}
+        ${c.ex ? `<div class="ex">“${esc(c.ex)}”</div>` : ""}${c.kind === "Sentence" ? `<div class="muted trans-back">${esc(c.trans)}</div>` : ""}
         <button class="small listen" id="listen" type="button">Listen</button>
         ${tools(c)}
       </div>`;

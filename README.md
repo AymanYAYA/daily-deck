@@ -17,7 +17,7 @@ Moving from French to English at work. Generic vocabulary apps don't target what
 | Level | What you do | Example | Cards |
 |---|---|---|---|
 | 1 · Intern | French verb → English verb | *partir* → **to leave** | 150 most used verbs |
-| 2 · Analyst | Irregular verbs: simple past and past participle, on separate cards | *to go*, simple past → **went** · past participle → **gone** | 57 verbs × 2 = 114 |
+| 2 · Analyst | Irregular verbs: simple past and past participle on separate cards. The French sentence is shown, the English one has a blank, so you learn when each form is used | *Il est rentré chez lui.* He has ___ (go) home. → **gone** | 57 verbs × 2 = 114 |
 | 3 · Consultant | Fill in the verb with the right tense (French sentence as hint) | *I ___ (live) here since 2020.* → **have lived** | 100 sentences |
 
 Level 3 trains the real trap for French speakers: choosing between simple past and present perfect (*J'ai mangé hier* = *I ate yesterday*, not *I have eaten*), plus passives, past perfect and the base form after *did*, *will* or *to*.
