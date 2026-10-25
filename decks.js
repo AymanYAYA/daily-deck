@@ -154,7 +154,7 @@ const VERBS = [
 ["nettoyer","to clean",[],"Clean your room."],
 ["cuisiner","to cook",[],"I cook every evening."],
 // ---------- Level 2 · Analyst: irregular verbs, simple past and past participle on separate cards. The French sentence is shown, the English one has a blank ----------
-["Yesterday I ___ (be) tired.", "was", ["were"], "Hier, j'étais fatigué.", "Analyst", "Simple past"],
+["Yesterday I ___ (be) tired.", "was", [], "Hier, j'étais fatigué.", "Analyst", "Simple past"],
 ["I have ___ (be) to London twice.", "been", [], "Je suis allé deux fois à Londres.", "Analyst", "Past participle"],
 ["I ___ (have) lunch with Tom yesterday.", "had", [], "J'ai déjeuné avec Tom hier.", "Analyst", "Simple past"],
 ["I have ___ (have) a long day.", "had", [], "J'ai eu une longue journée.", "Analyst", "Past participle"],
