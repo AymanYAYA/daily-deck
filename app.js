@@ -524,7 +524,16 @@ function settings() {
   } else account = `<p style="margin:0">Signed in as <b>${esc(window.cloud.user.email)}</b>. Your decks are saved in your account and follow you on every device.</p>
       <p class="muted small-text" style="margin:0" id="syncBadge">${syncText()}${sync.last ? ` · ${new Date(sync.last).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` : ""}</p>
       <div class="row"><button class="small" id="syncBtn">Sync now</button><button class="small" id="signOut">Sign out</button></div>`;
+  const install = isInstalled() ? `<p style="margin:0">✓ Hfad is installed on this device. It opens from its icon and works without internet.</p>`
+    : installPrompt ? `<p style="margin:0">Add Hfad to this device like a real app: its own icon, full screen, works without internet.</p><button class="primary" id="installBtn">Install Hfad</button>`
+    : isIOS() ? `<p style="margin:0">Add Hfad to your home screen like a real app: its own icon, full screen, works without internet.</p>
+        <ol class="small-text" style="margin:0;padding-left:1.2em"><li>Open this page in <b>Safari</b>.</li><li>Tap <b>Share</b> (the square with an arrow).</li><li>Tap <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol>`
+    : `<p style="margin:0">Add Hfad to this device like a real app: in Chrome or Edge, use the <b>Install</b> icon at the right of the address bar, or the browser menu → <b>Install Hfad</b>.</p>`;
   app.innerHTML = `${header("Settings")}
+    <div class="panel">
+      <h2>Install the app</h2>
+      ${install}
+    </div>
     <div class="panel">
       <h2>Account and sync</h2>
       ${account}
@@ -547,6 +556,7 @@ function settings() {
       <p class="muted small-text" style="margin:0">Hfad uses FSRS, the same scheduler as recent versions of Anki. It aims for a 90% chance that you still remember a card when it comes back: cards you know well come back after longer and longer gaps, cards you forget come back sooner.</p>
     </div>`;
   const on = (id, f) => { const el = $("#" + id); if (el) el.onclick = f; };
+  on("installBtn", async () => { if (!installPrompt) return; installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; render(); });
   on("signIn", async () => { try { await window.cloud.signIn(); } catch (e) { toast("Sign-in failed: " + (e.code || "try again")); } });
   on("signOut", async () => { await window.cloud.signOut(); S.syncedTo = null; saveLocal(); toast("Signed out. Your cards stay on this device."); render(); });
   on("syncBtn", () => syncNow(false).then(render));
@@ -581,5 +591,15 @@ document.addEventListener("keydown", e => { // keyboard: space/enter turns the c
   else if (ses.flipped && "1234".includes(e.key)) ses.grade(+e.key);
   else if (ses.flipped && (e.key === " " || e.key === "Enter")) { e.preventDefault(); const s = document.querySelector(".grades .suggest") || document.querySelector(".g-3"); s && s.click(); }
 });
+// ============================================================================
+// 7. Installable app (PWA): works offline, can be added to the home screen.
+// ============================================================================
+let installPrompt = null; // Android and desktop Chrome/Edge offer a one-tap install
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installPrompt = e; if (view.name === "settings") render(); });
+window.addEventListener("appinstalled", () => { installPrompt = null; toast("Hfad is installed"); if (view.name === "settings") render(); });
+const isInstalled = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) navigator.serviceWorker.register("sw.js").catch(() => {});
+
 load();
 render();

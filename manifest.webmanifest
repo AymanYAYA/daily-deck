@@ -1,0 +1,17 @@
+{
+  "name": "Hfad – learn by heart",
+  "short_name": "Hfad",
+  "description": "A simple Anki: your own decks and cards, FSRS spaced repetition, sync across devices.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4EEE3",
+  "theme_color": "#F4EEE3",
+  "lang": "en",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
