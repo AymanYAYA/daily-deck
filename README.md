@@ -20,10 +20,10 @@ Anki is the reference for spaced repetition, but it is powerful and austere: man
 
 **Daily limits per deck**: new cards per day and maximum reviews per day, so missed days never turn into a mountain.
 
-**Sync across devices.** Sign in with Google and your decks and progress are saved in your account (Firebase Authentication + Cloud Firestore), so phone and computer stay in step. The most recent version wins; a device that has never synced asks which data to keep before replacing anything. Firestore security rules let each user read and write only their own document. Without signing in, everything stays in the browser, with a backup file in Settings.
+**Sync across devices.** Sign in with Google and your decks and progress are saved in your account (Firebase Authentication + Cloud Firestore), so phone and computer stay in step. The most recent version wins; a device that has never synced asks which data to keep before replacing anything. Firestore security rules let each user read and write only their own document. Without signing in, everything stays on the device.
 
 ## Result
-An installable web app (PWA) for phone or desktop: add it to the home screen, it opens full screen with its own icon and works offline; no app store, account optional. It includes decks, cards, bulk add, browse and edit, 3D flip study, typed answers with checking, FSRS scheduling, daily limits and file backup. A starter deck of 364 English verb cards is included and can be edited or deleted.
+An installable web app (PWA) for phone or desktop: add it to the home screen, it opens full screen with its own icon and works offline; no app store, account optional. It includes decks, cards, bulk add, browse and edit, 3D flip study, typed answers with checking, FSRS scheduling, daily limits and Google sign-in with sync. A starter deck of 364 English verb cards is included and can be edited or deleted.
 
 ## Tech
 No framework: `index.html` (page and styles), `manifest.webmanifest` and `sw.js` (installable app and offline mode), `app.js` (FSRS scheduler, storage, sync logic, screens), `cloud.js` (Firebase sign-in and Firestore), `decks.js` (starter deck). Data lives in `localStorage` and, once signed in, in Firestore. Built with Claude.

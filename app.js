@@ -42,7 +42,7 @@ function outcomes(c, now = Date.now()) {
 const fmtIvl = d => d === 0 ? "now" : d < 30 ? d + "d" : d < 365 ? Math.round(d / 30) + "mo" : (d / 365).toFixed(1) + "y";
 
 // ============================================================================
-// 2. Storage. Everything lives in this browser (localStorage). Settings → Backup saves a copy as a file.
+// 2. Storage. Everything lives in this browser (localStorage); once signed in, also in the cloud (section 2b).
 // ============================================================================
 const KEY = "dailydeck.v2", OLD_KEY = "dailydeck.v1"; // storage keys keep the old name so existing progress is not lost
 let S;
@@ -531,7 +531,7 @@ function study() {
   }
 }
 
-// --- Settings: backup
+// --- Settings: install, account and sync
 function settings() {
   const total = S.cards.length;
   const studied = S.cards.filter(c => c.state !== "new").length;
@@ -544,7 +544,7 @@ function settings() {
     account = `<p style="margin:0">Signed in as <b>${esc(window.cloud.user.email)}</b>. Your account and this device both have progress. Which one do you keep?</p>
       <button class="primary" id="keepCloud">Keep my account: ${rStudied} cards studied, ${r.decks.length} deck${r.decks.length === 1 ? "" : "s"} (saved ${new Date(sync.pending.updated).toLocaleDateString("en-GB")})</button>
       <button id="keepLocal">Keep this device: ${studied} cards studied, ${S.decks.length} deck${S.decks.length === 1 ? "" : "s"}</button>
-      <p class="muted small-text" style="margin:0">The other version is replaced. Download a backup first if you're unsure.</p>`;
+      <p class="muted small-text" style="margin:0">The other version is replaced.</p>`;
   } else account = `<p style="margin:0">Signed in as <b>${esc(window.cloud.user.email)}</b>. Your decks are saved in your account and follow you on every device.</p>
       <p class="muted small-text" style="margin:0" id="syncBadge">${syncText()}${sync.last ? ` · ${new Date(sync.last).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` : ""}</p>
       <div class="row"><button class="small" id="syncBtn">Sync now</button><button class="small" id="signOut">Sign out</button></div>`;
@@ -562,14 +562,6 @@ function settings() {
       <h2>Account and sync</h2>
       ${account}
     </div>
-    <details class="panel adv">
-      <summary><b>Advanced: backup file</b> <span class="muted small-text">— optional</span></summary>
-      <p style="margin:0">${cloudOn() ? "You're signed in: your cards are already saved in your Google account. You don't need this." : "Not signed in? Your cards only live on this device. A backup file is a copy you keep yourself, to move your cards to another device or restore them if this one is wiped."}</p>
-      <button id="dl">Download a backup file</button>
-      <button id="restoreBtn">Restore from a backup file</button>
-      <input type="file" id="file" accept=".json,application/json" hidden>
-      <p class="muted small-text" style="margin:0">Restoring replaces the cards on this device with the ones in the file. On this device since ${new Date(S.since).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}.</p>
-    </details>
     <div class="panel">
       <h2>How cards are scheduled</h2>
       <p class="muted small-text" style="margin:0">Hfad uses FSRS, the same scheduler as recent versions of Anki. It aims for a 90% chance that you still remember a card when it comes back: cards you know well come back after longer and longer gaps, cards you forget come back sooner.</p>
@@ -581,23 +573,6 @@ function settings() {
   on("syncBtn", () => syncNow(false).then(render));
   on("keepCloud", () => { applyRemote(sync.pending); sync.pending = null; toast("Your account's data is now on this device"); go({ name: "home" }); });
   on("keepLocal", () => { sync.pending = null; S.syncedTo = window.cloud.user.uid; S.updated = Date.now(); saveLocal(); pushNow().then(() => { toast("This device's data is now saved in your account"); render(); }); });
-  $("#dl").onclick = () => {
-    try {
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(new Blob([JSON.stringify(S)], { type: "application/json" }));
-      a.download = `hfad-backup-${dayKey()}.json`; document.body.appendChild(a); a.click(); a.remove();
-      toast("Backup downloaded");
-    } catch (e) { toast("Download blocked by this browser."); }
-  };
-  $("#restoreBtn").onclick = () => $("#file").click();
-  $("#file").onchange = async e => {
-    const f = e.target.files[0]; if (!f) return;
-    try {
-      const data = JSON.parse(await f.text());
-      if (!Array.isArray(data.decks) || !Array.isArray(data.cards)) throw 0;
-      S = { ...data, syncedTo: cloudOn() ? window.cloud.user.uid : null }; S.log = S.log || []; S.intro = S.intro || {}; save(); toast("Backup restored"); go({ name: "home" });
-    } catch (err) { toast("This file is not a Hfad backup."); }
-  };
 }
 
 // ============================================================================

@@ -2,7 +2,7 @@
 // App files: network first (so updates arrive right away), saved copy when offline.
 // Fonts and the Firebase library: saved copy first, refreshed in the background.
 // Sign-in and database calls are never cached: they always go to the network.
-const CACHE = "hfad-v2";
+const CACHE = "hfad-v3";
 const APP = ["./", "index.html", "app.js", "decks.js", "cloud.js", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png", "icons/favicon.png"];
 
@@ -22,7 +22,7 @@ self.addEventListener("fetch", e => {
   const url = new URL(req.url);
   if (url.origin === self.location.origin) {
     e.respondWith(
-      fetch(req).then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); return res; })
+      fetch(req, { cache: "no-cache" }).then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); return res; })
         .catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match("index.html")))
     );
   } else if (isLibrary(url)) {
