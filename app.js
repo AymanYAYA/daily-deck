@@ -1,4 +1,4 @@
-// Daily Deck – a simple Anki: your own decks and cards, scheduled with FSRS.
+// Hfad – a simple Anki: your own decks and cards, scheduled with FSRS.
 // Files: index.html (page and styles), app.js (this file: scheduler, storage, screens), decks.js (starter verbs deck).
 
 // ============================================================================
@@ -94,11 +94,71 @@ function load() {
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
   S.decks.forEach(d => { d.opts = { ...defaultOpts(), ...(d.opts || {}) }; });
 }
-function save() {
+// Every change: keep it in this browser, then send it to the cloud a moment later if signed in.
+function save() { S.updated = Date.now(); saveLocal(); schedulePush(); }
+function saveLocal() {
   const limit = Date.now() - 180 * DAY; // keep the history small (about 5 MB per site in browsers)
   if (S.log.length && S.log[0].t < limit) S.log = S.log.filter(l => l.t >= limit);
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast("Could not save: storage is full or blocked."); }
 }
+
+// ============================================================================
+// 2b. Cloud sync (cloud.js): sign in with Google, your decks follow you on every device.
+//     Rule: the most recent version wins. A device that has never synced with this account asks before replacing anything.
+// ============================================================================
+const DEVICE = (() => { try { let d = localStorage.getItem("dailydeck.device"); if (!d) { d = uid(); localStorage.setItem("dailydeck.device", d); } return d; } catch (e) { return "unknown"; } })();
+let sync = { state: "off", pending: null, last: 0 };
+const cloudOn = () => window.cloud && window.cloud.user;
+function payload() {
+  const { log, pendingCloud, ...rest } = S, t0 = dayStart();
+  return { v: 2, updated: S.updated || Date.now(), device: DEVICE, state: JSON.stringify({ ...rest, log: log.filter(l => l.t >= t0) }) };
+}
+let pushTimer;
+function schedulePush() { if (!cloudOn() || S.syncedTo !== window.cloud.user.uid) return; clearTimeout(pushTimer); pushTimer = setTimeout(pushNow, 1500); }
+async function pushNow() {
+  if (!cloudOn()) return;
+  sync.state = "syncing"; syncBadge();
+  try { await window.cloud.push(payload()); S.syncedTo = window.cloud.user.uid; sync.last = Date.now(); sync.state = "ok"; saveLocal(); }
+  catch (e) { sync.state = "error"; }
+  syncBadge();
+}
+function applyRemote(remote) {
+  const r = JSON.parse(remote.state), t0 = dayStart();
+  const seen = new Set(), log = [...S.log.filter(l => l.t < t0), ...S.log.filter(l => l.t >= t0), ...(r.log || [])]
+    .filter(l => { const k = l.t + "|" + l.card; if (seen.has(k)) return false; seen.add(k); return true; }).sort((a, b) => a.t - b.t);
+  S = { ...r, log, since: S.since, syncedTo: window.cloud.user.uid, updated: remote.updated };
+  S.intro = S.intro || {}; S.decks.forEach(d => { d.opts = { ...defaultOpts(), ...(d.opts || {}) }; });
+  saveLocal(); sync.last = Date.now(); sync.state = "ok";
+  if (view.name !== "study") render();
+}
+async function syncNow(firstTime) {
+  if (!cloudOn()) return;
+  sync.state = "syncing"; syncBadge();
+  let remote;
+  try { remote = await window.cloud.pull(); } catch (e) { sync.state = "error"; syncBadge(); return; }
+  const studied = S.cards.filter(c => c.state !== "new").length;
+  if (!remote) return pushNow();                                               // first device: the cloud starts from here
+  if (S.syncedTo === window.cloud.user.uid) {                                  // this device already syncs with this account
+    if (remote.updated > (S.updated || 0) && remote.device !== DEVICE) applyRemote(remote);
+    else if ((S.updated || 0) > remote.updated) return pushNow();
+    else { sync.state = "ok"; sync.last = Date.now(); }
+  } else if (!studied) applyRemote(remote);                                    // nothing here yet: take the cloud
+  else { sync.pending = remote; sync.state = "choice"; if (firstTime && view.name !== "study") go({ name: "settings" }); }
+  syncBadge();
+}
+function syncBadge() { const b = document.getElementById("syncBadge"); if (b) b.innerHTML = syncText(); }
+function syncText() {
+  if (!window.cloud) return `<span class="muted">Sync loading…</span>`;
+  if (!window.cloud.user) return `<button class="link" data-go-settings>☁ Sign in to sync your devices</button>`;
+  return { off: "☁ Signed in", syncing: "☁ Syncing…", ok: "☁ Synced", error: "☁ Sync failed, retrying soon", choice: "☁ Choose which data to keep (Settings)" }[sync.state] || "☁";
+}
+window.addEventListener("cloud-ready", () => { syncBadge(); if (view.name === "settings") render(); });
+window.addEventListener("cloud-auth", () => {
+  if (cloudOn()) syncNow(true); else { sync.state = "off"; }
+  syncBadge(); if (view.name === "settings") render();
+});
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && cloudOn() && view.name !== "study") syncNow(false); });
+document.addEventListener("click", e => { if (e.target.closest("[data-go-settings]")) go({ name: "settings" }); });
 
 // ============================================================================
 // 3. Daily queue per deck: learning cards first, then reviews mixed with new cards.
@@ -188,7 +248,8 @@ function home() {
     const k = counts(d), total = cardsOf(d.id).length;
     return `<button class="deck-row" data-deck="${d.id}"><span><span class="name">${esc(d.name)}</span><br><span class="sub">${total} card${total === 1 ? "" : "s"}</span></span>${nums(k.fresh.length, k.due.length + k.learning.length)}</button>`;
   }).join("");
-  app.innerHTML = `${header("Daily Deck")}
+  app.innerHTML = `${header("Hfad")}
+    <div class="small-text sync" id="syncBadge">${syncText()}</div>
     ${S.decks.length ? `<div class="row small-text muted"><span class="n-new">● New</span><span class="n-due">● To review</span></div><div class="decks">${rows}</div>`
       : `<div class="panel empty"><div class="big">No deck yet</div><p class="muted" style="margin:0">Create your first deck, then add cards to it.</p></div>`}
     <div class="panel">
@@ -449,7 +510,25 @@ function study() {
 // --- Settings: backup
 function settings() {
   const total = S.cards.length;
+  const studied = S.cards.filter(c => c.state !== "new").length;
+  let account;
+  if (!window.cloud) account = `<p class="muted" style="margin:0">Loading… If this stays, the sync service can't be reached from this network.</p>`;
+  else if (!window.cloud.user) account = `<p style="margin:0">Sign in with Google to keep your decks and progress on all your devices (phone, computer…).</p>
+      <button class="primary" id="signIn">Sign in with Google</button>`;
+  else if (sync.state === "choice" && sync.pending) {
+    const r = JSON.parse(sync.pending.state), rStudied = r.cards.filter(c => c.state !== "new").length;
+    account = `<p style="margin:0">Signed in as <b>${esc(window.cloud.user.email)}</b>. Your account and this device both have progress. Which one do you keep?</p>
+      <button class="primary" id="keepCloud">Keep my account: ${rStudied} cards studied, ${r.decks.length} deck${r.decks.length === 1 ? "" : "s"} (saved ${new Date(sync.pending.updated).toLocaleDateString("en-GB")})</button>
+      <button id="keepLocal">Keep this device: ${studied} cards studied, ${S.decks.length} deck${S.decks.length === 1 ? "" : "s"}</button>
+      <p class="muted small-text" style="margin:0">The other version is replaced. Download a backup first if you're unsure.</p>`;
+  } else account = `<p style="margin:0">Signed in as <b>${esc(window.cloud.user.email)}</b>. Your decks are saved in your account and follow you on every device.</p>
+      <p class="muted small-text" style="margin:0" id="syncBadge">${syncText()}${sync.last ? ` · ${new Date(sync.last).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` : ""}</p>
+      <div class="row"><button class="small" id="syncBtn">Sync now</button><button class="small" id="signOut">Sign out</button></div>`;
   app.innerHTML = `${header("Settings")}
+    <div class="panel">
+      <h2>Account and sync</h2>
+      ${account}
+    </div>
     <div class="panel">
       <h2>This browser</h2>
       <p style="margin:0">Progress saved here since <b>${new Date(S.since).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</b> · <b>${S.cards.filter(c => c.state !== "new").length}</b> cards already studied.</p>
@@ -465,13 +544,19 @@ function settings() {
     </div>
     <div class="panel">
       <h2>How cards are scheduled</h2>
-      <p class="muted small-text" style="margin:0">Daily Deck uses FSRS, the same scheduler as recent versions of Anki. It aims for a 90% chance that you still remember a card when it comes back: cards you know well come back after longer and longer gaps, cards you forget come back sooner.</p>
+      <p class="muted small-text" style="margin:0">Hfad uses FSRS, the same scheduler as recent versions of Anki. It aims for a 90% chance that you still remember a card when it comes back: cards you know well come back after longer and longer gaps, cards you forget come back sooner.</p>
     </div>`;
+  const on = (id, f) => { const el = $("#" + id); if (el) el.onclick = f; };
+  on("signIn", async () => { try { await window.cloud.signIn(); } catch (e) { toast("Sign-in failed: " + (e.code || "try again")); } });
+  on("signOut", async () => { await window.cloud.signOut(); S.syncedTo = null; saveLocal(); toast("Signed out. Your cards stay on this device."); render(); });
+  on("syncBtn", () => syncNow(false).then(render));
+  on("keepCloud", () => { applyRemote(sync.pending); sync.pending = null; toast("Your account's data is now on this device"); go({ name: "home" }); });
+  on("keepLocal", () => { sync.pending = null; S.syncedTo = window.cloud.user.uid; S.updated = Date.now(); saveLocal(); pushNow().then(() => { toast("This device's data is now saved in your account"); render(); }); });
   $("#dl").onclick = () => {
     try {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([JSON.stringify(S)], { type: "application/json" }));
-      a.download = `daily-deck-backup-${dayKey()}.json`; document.body.appendChild(a); a.click(); a.remove();
+      a.download = `hfad-backup-${dayKey()}.json`; document.body.appendChild(a); a.click(); a.remove();
       toast("Backup downloaded");
     } catch (e) { toast("Download blocked by this browser."); }
   };
@@ -481,8 +566,8 @@ function settings() {
     try {
       const data = JSON.parse(await f.text());
       if (!Array.isArray(data.decks) || !Array.isArray(data.cards)) throw 0;
-      S = data; S.log = S.log || []; S.intro = S.intro || {}; save(); toast("Backup restored"); go({ name: "home" });
-    } catch (err) { toast("This file is not a Daily Deck backup."); }
+      S = { ...data, syncedTo: cloudOn() ? window.cloud.user.uid : null }; S.log = S.log || []; S.intro = S.intro || {}; save(); toast("Backup restored"); go({ name: "home" });
+    } catch (err) { toast("This file is not a Hfad backup."); }
   };
 }
 

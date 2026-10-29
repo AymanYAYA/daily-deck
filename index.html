@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Daily Deck</title>
+<title>Hfad</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Daily Deck">
+<meta name="apple-mobile-web-app-title" content="Hfad">
 <meta name="theme-color" content="#F4EEE3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Source+Sans+3:wght@400;600&display=swap">
@@ -63,6 +63,8 @@ textarea.big { min-height: 200px; font-size: 0.95rem; }
 .deck-row .sub { font-size: 0.82rem; color: var(--muted); }
 .nums { display: flex; gap: 12px; font-variant-numeric: tabular-nums; font-weight: 600; font-size: 0.95rem; }
 .n-new { color: var(--new); } .n-due { color: var(--due); } .n-zero { color: var(--line); }
+.sync { margin-top: -10px; color: var(--muted); }
+.sync .link { font-size: inherit; font-weight: 600; }
 .empty { text-align: center; padding: 34px 20px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
 .empty .big { font-family: var(--display); font-size: 1.6rem; color: var(--accent); }
 
@@ -140,7 +142,8 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>Settings</button>
   </div>
 </nav>
-<script src="decks.js?v=8"></script>
-<script src="app.js?v=9"></script>
+<script src="decks.js?v=9"></script>
+<script src="app.js?v=10"></script>
+<script type="module" src="cloud.js?v=1"></script>
 </body>
 </html>

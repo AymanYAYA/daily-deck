@@ -1,4 +1,6 @@
-# Daily Deck
+# Hfad
+
+*Hfad* (حفظ) means "learn by heart" in Moroccan Arabic, like *anki* in Japanese.
 
 A simple Anki: create your own decks and cards, and review them with the same scheduler as modern Anki (FSRS). Built for learning English, usable for anything.
 
@@ -18,10 +20,10 @@ Anki is the reference for spaced repetition, but it is powerful and austere: man
 
 **Daily limits per deck**: new cards per day and maximum reviews per day, so missed days never turn into a mountain.
 
-**Backup.** Everything is stored in the browser; Settings downloads a backup file and restores it on any device.
+**Sync across devices.** Sign in with Google and your decks and progress are saved in your account (Firebase Authentication + Cloud Firestore), so phone and computer stay in step. The most recent version wins; a device that has never synced asks which data to keep before replacing anything. Firestore security rules let each user read and write only their own document. Without signing in, everything stays in the browser, with a backup file in Settings.
 
 ## Result
-A web app that runs on phone or desktop with no install and no account: decks, cards, bulk add, browse and edit, 3D flip study, typed answers with checking, FSRS scheduling, daily limits and file backup. A starter deck of 364 English verb cards is included and can be edited or deleted.
+A web app that runs on phone or desktop with no install, account optional: decks, cards, bulk add, browse and edit, 3D flip study, typed answers with checking, FSRS scheduling, daily limits and file backup. A starter deck of 364 English verb cards is included and can be edited or deleted.
 
 ## Tech
-No framework, three files: `index.html` (page and styles), `app.js` (FSRS scheduler, storage, screens), `decks.js` (starter deck). Data lives in `localStorage`. Built with Claude.
+No framework: `index.html` (page and styles), `app.js` (FSRS scheduler, storage, sync logic, screens), `cloud.js` (Firebase sign-in and Firestore), `decks.js` (starter deck). Data lives in `localStorage` and, once signed in, in Firestore. Built with Claude.
