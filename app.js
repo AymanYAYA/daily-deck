@@ -490,15 +490,15 @@ function study() {
     <div class="scene enter"><div class="flip" id="flip">
       <div class="face front"><div class="tag"><span>${stateTag}</span></div>
         <div class="q">${esc(c.front)}</div>
-        ${typeMode ? `<div class="spacer"></div><div class="answer-box">
-            <input type="text" id="ans" aria-label="Your answer" placeholder="Type your answer" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
-            <div id="hintBox"></div>
-            <button class="small" id="hintBtn" style="align-self:flex-start">Hint</button></div>`
+        ${typeMode ? `<div class="spacer"></div><div id="hintBox"></div>`
           : `<div class="spacer"></div><div class="tap">Tap the card to turn it over</div>`}
       </div>
       <div class="face back" id="backFace"></div>
     </div></div>
-    <div id="controls">${typeMode ? `<div class="pair"><button class="giveup" id="giveUp">I give up</button><button class="primary" id="showBtn">Check</button></div>` : `<button class="primary wide" id="showBtn">Show answer</button>`}</div>`;
+    <div id="controls">${typeMode ? `<div class="answer-box">
+        <input type="text" id="ans" aria-label="Your answer" placeholder="Type your answer" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
+        <button class="small" id="hintBtn" style="align-self:flex-start">Hint</button></div>
+      <div class="pair"><button class="giveup" id="giveUp">I give up</button><button class="primary" id="showBtn">Check</button></div>` : `<button class="primary wide" id="showBtn">Show answer</button>`}</div>`;
   wireBack({ name: "deck", deck: d.id });
   const reveal = () => {
     if (ses.flipped) return;
@@ -507,7 +507,7 @@ function study() {
     const sug = typeMode ? suggestion() : 0;
     $("#backFace").innerHTML = `<div class="tag"><span>${stateTag}</span></div>
       <div class="q small-q">${esc(c.front)}</div>
-      ${typeMode ? `<div class="verdict g${sug}">${VERDICT[ses.verdict]}${ses.hint && ses.verdict === "exact" ? " (with the hint)" : ""}</div>${ses.typed.trim() && ses.verdict !== "giveup" ? `<div class="yours">You typed: ${esc(ses.typed)}</div>` : ""}` : ""}
+      ${typeMode ? `<div class="verdict g${ses.verdict === "exact" ? 3 : sug}">${VERDICT[ses.verdict]}${ses.hint && ses.verdict === "exact" ? " (with the hint)" : ""}</div>${ses.typed.trim() && ses.verdict !== "giveup" ? `<div class="yours">You typed: ${esc(ses.typed)}</div>` : ""}` : ""}
       <div class="a">${typeMode && ses.typed.trim() && ses.verdict !== "giveup" && ses.verdict !== "exact" ? markMissing(ses.typed, c.back) : esc(c.back)}</div>
       ${c.extra ? `<div class="x">${esc(c.extra)}</div>` : ""}`;
     requestAnimationFrame(() => $("#flip").classList.add("turned"));
