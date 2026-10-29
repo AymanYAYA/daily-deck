@@ -44,7 +44,7 @@ const fmtIvl = d => d === 0 ? "now" : d < 30 ? d + "d" : d < 365 ? Math.round(d 
 // ============================================================================
 // 2. Storage. Everything lives in this browser (localStorage). Settings → Backup saves a copy as a file.
 // ============================================================================
-const KEY = "dailydeck.v2", OLD_KEY = "dailydeck.v1";
+const KEY = "dailydeck.v2", OLD_KEY = "dailydeck.v1"; // storage keys keep the old name so existing progress is not lost
 let S;
 function dayStart(t = Date.now()) { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); }
 function dayKey(t = Date.now()) { const d = new Date(t); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }

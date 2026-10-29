@@ -4,7 +4,7 @@
 
 A simple Anki: create your own decks and cards, and review them with the same scheduler as modern Anki (FSRS). Built for learning English, usable for anything.
 
-**Try it:** https://aymanyaya.github.io/daily-deck/
+**Try it:** https://aymanyaya.github.io/hfad/
 
 ## Problem
 Anki is the reference for spaced repetition, but it is powerful and austere: many people give up on the interface before the method works. I wanted the same engine with a much simpler experience, and an option Anki doesn't make easy: typing the answer and having it checked.

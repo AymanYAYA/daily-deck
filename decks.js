@@ -1,4 +1,4 @@
-// Daily Deck – card data. Edit or add cards here; the logic lives in app.js.
+// Hfad – card data. Edit or add cards here; the logic lives in app.js.
 // ---------- Verbs deck: [prompt, English answer, other accepted answers, example (or French translation for sentences), level, kind] ----------
 // Level 1 · Intern: the 150 verbs used most in English (approximate order, from frequency lists of large text corpora).
 // Append-only: a card's id comes from its position.
