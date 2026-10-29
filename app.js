@@ -453,7 +453,7 @@ function settings() {
     <div class="panel">
       <h2>This browser</h2>
       <p style="margin:0">Progress saved here since <b>${new Date(S.since).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</b> · <b>${S.cards.filter(c => c.state !== "new").length}</b> cards already studied.</p>
-      <p class="muted small-text" style="margin:0">If this date is today every time you open the app, this browser is not keeping your progress: open the app the same way each time (see below).</p>
+      <p class="muted small-text" style="margin:0">If this date is today every time you open the app, this browser is not keeping your progress. Open the app the same way every time, ideally from an icon on your home screen (Safari → Share → Add to Home Screen).</p>
     </div>
     <div class="panel">
       <h2>Backup</h2>
