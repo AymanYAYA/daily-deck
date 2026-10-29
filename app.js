@@ -1,520 +1,492 @@
-// Daily Deck – app logic: decks, spaced repetition (SM-2), answer checking and screens. Cards live in decks.js.
-// ---------- Decks ----------
-const DECKS = {
-  verbs: { name: "Verbs", about: "French verb → English verb" },
-};
-// Levels: same ladder for every deck. A level with no cards yet shows as "soon".
-const LEVELS = ["Intern", "Analyst", "Consultant", "Manager", "Partner"];
-const TAG_LEVEL = { Meeting: "Analyst", Email: "Analyst", Interview: "Consultant", Case: "Consultant", Consulting: "Consultant", Finance: "Partner", Tech: "Partner" };
+// Daily Deck – a simple Anki: your own decks and cards, scheduled with FSRS.
+// Files: index.html (page and styles), app.js (this file: scheduler, storage, screens), decks.js (starter verbs deck).
 
-const KEY = "dailydeck.v1";
+// ============================================================================
+// 1. FSRS-5 scheduler (the algorithm Anki uses since 23.10), default parameters.
+//    Each card has a stability S (days until recall drops to 90%) and a difficulty D (1–10).
+//    Grades: 1 Again · 2 Hard · 3 Good · 4 Easy.
+// ============================================================================
+const W = [0.40255, 1.18385, 3.173, 15.69105, 7.1949, 0.5345, 1.4604, 0.0046, 1.54575, 0.1192,
+  1.01925, 1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898, 0.51655, 0.6621];
+const F = 19 / 81, C = -0.5;
+const RETENTION = 0.9;            // aim: 90% chance you still remember a card when it comes back
+const MAX_IVL = 36500;
 const DAY = 86400000;
-const MASTERED = 21; // mastered: its next review is 3 weeks or more away
-const SOLID = 7;     // solid: its next review is a week or more away. A level closes when all its cards are solid.
-const UNLOCK = 3;    // Expressions: "say it" unlocks once you understand the card with a 3-day gap
-const HARD = 2;      // missed twice or more: listed in "Hardest cards"
-let S;
+const clampD = d => Math.min(10, Math.max(1, d));
+const retrievability = (t, s) => Math.pow(1 + F * t / s, C);                     // chance of recall after t days
+const ivlFor = s => Math.min(MAX_IVL, Math.max(1, Math.round(s / F * (Math.pow(RETENTION, 1 / C) - 1))));
+const initD = g => clampD(W[4] - Math.exp(W[5] * (g - 1)) + 1);
+const nextD = (d, g) => clampD(W[7] * initD(4) + (1 - W[7]) * (d - W[6] * (g - 3) * (10 - d) / 9));
+const successS = (d, s, r, g) => s * (1 + Math.exp(W[8]) * (11 - d) * Math.pow(s, -W[9]) * (Math.exp(W[10] * (1 - r)) - 1) * (g === 2 ? W[15] : 1) * (g === 4 ? W[16] : 1));
+const lapseS = (d, s, r) => Math.min(s, W[11] * Math.pow(d, -W[12]) * (Math.pow(s + 1, W[13]) - 1) * Math.exp(W[14] * (1 - r)));
+const sameDayS = (s, g) => s * Math.exp(W[17] * (g - 3 + W[18]));                  // reviewed again the same day
 
-function blank() { return { introduced: null, due: 0, interval: 0, ease: 2.3, reps: 0, lapses: 0 }; }
-function makeExpr(d, i) { return { id: "d" + (i + 1), deck: "expr", en: d[0], alts: [], fr: d[1], ex: d[2], tag: d[3], level: d[4] || TAG_LEVEL[d[3]] || "Intern", ...blank(), p: blank() }; }
-// Kinds: none = French verb → English verb · "Simple past" / "Past participle" = give that form · "Sentence" = fill in the blank
-function makeVerb(d, i) {
-  const kind = d[5] || "", c = { id: "v" + (i + 1), deck: "verbs", fr: d[0], en: d[1], alts: d[2] || [], ex: d[3], tag: "Verbs", level: d[4] || "Intern", kind, ...blank(), p: blank() };
-  if (kind) { c.trans = d[3]; c.ex = d[0].replace(/___\s*\([^)]*\)/, d[1]); } // d[0] has a blank, d[3] is the French sentence
-  return c;
+// What each of the four buttons would do to this card. Intervals are kept in order: Hard ≤ Good < Easy.
+function outcomes(c, now = Date.now()) {
+  const out = {};
+  for (const g of [1, 2, 3, 4]) {
+    let s, d;
+    if (c.state === "new") { s = W[g - 1]; d = initD(g); }
+    else {
+      const t = Math.max(0, Math.round((dayStart(now) - dayStart(c.last)) / DAY));
+      if (t < 1) s = sameDayS(c.stab, g);
+      else { const r = retrievability(t, c.stab); s = g === 1 ? lapseS(c.diff, c.stab, r) : successS(c.diff, c.stab, r, g); }
+      d = nextD(c.diff, g);
+    }
+    out[g] = { stab: Math.max(0.01, s), diff: d, ivl: g === 1 ? 0 : ivlFor(s) };
+  }
+  out[3].ivl = Math.max(out[3].ivl, out[2].ivl);
+  out[4].ivl = Math.max(out[4].ivl, out[3].ivl + 1);
+  return out;
 }
-const KIND_LABEL = { "": "Verb", "Simple past": "Irregular verb", "Past participle": "Irregular verb", Sentence: "Fill in the verb" };
-function allMade() { return VERBS.map(makeVerb); } // add new decks here
-function fresh() { return { cards: allMade(), log: [], settings: {}, intro: {}, goal: {}, flags: {}, level: {}, deck: "verbs" }; }
-function normalize() {
-  S.settings = Object.assign({ newPerDay: 10, reviewCap: 80 }, S.settings || {});
-  S.intro = S.intro || {}; S.log = S.log || []; S.goal = S.goal || {}; S.flags = S.flags || {};
-  if (typeof S.level !== "object" || S.level === null) S.level = {};
-  if (!DECKS[S.deck]) S.deck = "verbs";
-  S.cards.forEach(c => { if (!c.p) c.p = blank(); if (!c.deck) c.deck = "expr"; });
+const fmtIvl = d => d === 0 ? "now" : d < 30 ? d + "d" : d < 365 ? Math.round(d / 30) + "mo" : (d / 365).toFixed(1) + "y";
+
+// ============================================================================
+// 2. Storage. Everything lives in this browser (localStorage). Settings → Backup saves a copy as a file.
+// ============================================================================
+const KEY = "dailydeck.v2", OLD_KEY = "dailydeck.v1";
+let S;
+function dayStart(t = Date.now()) { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); }
+function dayKey(t = Date.now()) { const d = new Date(t); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const defaultOpts = () => ({ newPerDay: 10, maxReviews: 200, mode: "flip" });
+function newCard(deck, front, back, extra = "", alts = [], order = 0) {
+  return { id: uid(), deck, front, back, extra, alts, order: order || Date.now(), state: "new", due: 0, stab: 0, diff: 0, reps: 0, lapses: 0, last: 0 };
+}
+// Starter deck built from decks.js (the verbs), so a first visit has something to try.
+function starterCards(deckId) {
+  return VERBS.map((d, i) => {
+    const kind = d[5];
+    const front = kind ? d[3] + "\n\n" + d[0] : d[0];
+    const extra = kind ? d[0].replace(/___\s*\([^)]*\)/, d[1]) : d[3];
+    const c = newCard(deckId, front, d[1], extra, d[2] || [], i + 1);
+    c.id = "v" + (i + 1);
+    return c;
+  });
+}
+function freshState() {
+  const deck = { id: "verbs", name: "Verbs", opts: { ...defaultOpts(), mode: "type" } };
+  return { v: 2, decks: [deck], cards: starterCards(deck.id), log: [], intro: {} };
+}
+// Older version of the app (one built-in verbs deck, SM-2): keep the verb progress.
+function migrateV1(old) {
+  const st = freshState();
+  const prev = new Map((old.cards || []).map(c => [c.id, c]));
+  st.cards.forEach(c => {
+    const o = prev.get(c.id), p = o && o.p;
+    if (!p || !p.introduced) return;
+    c.state = "review"; c.stab = Math.max(0.5, p.interval || 1); c.diff = clampD(initD(3) + (p.lapses || 0) * 0.5);
+    c.due = p.due || dayStart(); c.last = c.due - (p.interval || 1) * DAY; c.reps = p.reps || 1; c.lapses = p.lapses || 0;
+  });
+  return st;
 }
 function load() {
   try { const raw = localStorage.getItem(KEY); if (raw) S = JSON.parse(raw); } catch (e) {}
-  if (!S || !Array.isArray(S.cards)) S = fresh();
-  normalize();
-  // Text, level and accepted answers always come from the deck: a corrected card is fixed and keeps its progress.
-  // Cards and history of decks that no longer exist are dropped.
-  const made = allMade(), ids = new Set(made.map(m => m.id));
-  S.cards = S.cards.filter(c => ids.has(c.id));
-  S.log = S.log.filter(l => DECKS[l.deck]);
-  const have = new Map(S.cards.map(c => [c.id, c]));
-  made.forEach(m => {
-    const c = have.get(m.id);
-    if (c) { Object.assign(c, { en: m.en, fr: m.fr, ex: m.ex, tag: m.tag, level: m.level, alts: m.alts, deck: m.deck, kind: m.kind, trans: m.trans }); delete c.asked; }
-    else S.cards.push(m);
-  });
-  Object.keys(DECKS).forEach(d => { if (S.level[d] === undefined) S.level[d] = currentLevel(d); });
+  if (!S || !Array.isArray(S.decks)) {
+    let old = null;
+    try { const raw = localStorage.getItem(OLD_KEY); if (raw) old = JSON.parse(raw); } catch (e) {}
+    S = old && Array.isArray(old.cards) ? migrateV1(old) : freshState();
+    save();
+  }
+  S.log = S.log || []; S.intro = S.intro || {};
+  S.decks.forEach(d => { d.opts = { ...defaultOpts(), ...(d.opts || {}) }; });
+}
+function save() {
+  const limit = Date.now() - 180 * DAY; // keep the history small (about 5 MB per site in browsers)
+  if (S.log.length && S.log[0].t < limit) S.log = S.log.filter(l => l.t >= limit);
+  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast("Could not save: storage is full or blocked."); }
+}
+
+// ============================================================================
+// 3. Daily queue per deck: learning cards first, then reviews mixed with new cards.
+// ============================================================================
+const deckById = id => S.decks.find(d => d.id === id);
+const cardById = id => S.cards.find(c => c.id === id);
+const cardsOf = id => S.cards.filter(c => c.deck === id);
+const introKey = id => id + "|" + dayKey();
+function reviewsToday(id) { const s = dayStart(); return S.log.filter(l => l.t >= s && l.deck === id && l.was !== "new").length; }
+function counts(deck, extraNew = 0) {
+  const end = dayStart() + DAY, cs = cardsOf(deck.id);
+  const learning = cs.filter(c => c.state === "learning" && c.due < end).sort((a, b) => a.due - b.due);
+  const due = cs.filter(c => c.state === "review" && c.due < end).sort((a, b) => a.due - b.due)
+    .slice(0, Math.max(0, deck.opts.maxReviews - reviewsToday(deck.id)));
+  const fresh = cs.filter(c => c.state === "new").sort((a, b) => a.order - b.order)
+    .slice(0, Math.max(0, deck.opts.newPerDay + extraNew - (S.intro[introKey(deck.id)] || 0)));
+  return { learning, due, fresh, newLeft: cs.filter(c => c.state === "new").length };
+}
+function buildQueue(deck, extraNew = 0) {
+  const { learning, due, fresh } = counts(deck, extraNew);
+  const mixed = [], every = fresh.length ? Math.max(1, Math.floor(due.length / fresh.length)) : 0;
+  let n = 0;
+  due.forEach((c, i) => { mixed.push(c); if (every && (i + 1) % every === 0 && n < fresh.length) mixed.push(fresh[n++]); });
+  while (n < fresh.length) mixed.push(fresh[n++]);
+  return [...learning, ...mixed].map(c => c.id);
+}
+function answer(c, g) {
+  const o = outcomes(c)[g], now = Date.now(), was = c.state;
+  if (was === "new") S.intro[introKey(c.deck)] = (S.intro[introKey(c.deck)] || 0) + 1;
+  c.stab = o.stab; c.diff = o.diff; c.last = now; c.reps++;
+  if (g === 1) { if (was === "review") c.lapses++; c.state = "learning"; c.due = now; } // comes back a few cards later
+  else { c.state = "review"; c.due = dayStart(now) + o.ivl * DAY; }
+  S.log.push({ t: now, card: c.id, deck: c.deck, g, was });
   save();
 }
-// Browsers give each site about 5 MB: keep the detailed log for 180 days, older days as a simple count.
-function compact() {
-  const limit = dayStart() - 180 * DAY;
-  if (!S.log.length || S.log[0].t >= limit) return;
-  S.days = S.days || {};
-  S.log.forEach(l => { if (l.t < limit && !l.practice) S.days[dayKey(l.t)] = (S.days[dayKey(l.t)] || 0) + 1; });
-  S.log = S.log.filter(l => l.t >= limit);
-}
-function save() { try { compact(); localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
 
-// ---------- Dates ----------
-function dayStart(t = Date.now()) { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); }
-function dayKey(t = Date.now()) { const d = new Date(t); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
-
-// ---------- Cards and sides ----------
-// "p" = say it in English (French shown). "r" = understand it (English shown), Expressions only.
-const side = (c, dir) => dir === "p" ? c.p : c;
-const byId = id => S.cards.find(c => c.id === id);
-const parseQ = q => { const [id, dir] = q.split("|"); return { c: byId(id), dir }; };
-const sidesOf = c => c.deck === "verbs" ? ["p"] : ["r", "p"];
-const deckCards = d => S.cards.filter(c => c.deck === d);
-const levelCards = (d, name) => deckCards(d).filter(c => c.level === name);
-const isMastered = c => sidesOf(c).every(dir => side(c, dir).interval >= MASTERED);
-// Irregular verbs are what you hesitate on most: their cards must hold two weeks, not one, before the level closes.
-const SOLID_BY_LEVEL = { Analyst: 14 };
-const solidDays = level => SOLID_BY_LEVEL[level] || SOLID;
-const isSolid = c => sidesOf(c).every(dir => side(c, dir).interval >= solidDays(c.level));
-const unlocked = c => c.deck === "verbs" || (!!c.introduced && c.interval >= UNLOCK);
-function currentLevel(d) { // first level not closed yet; a level without cards stops the climb
-  for (let i = 0; i < LEVELS.length; i++) { const cs = levelCards(d, LEVELS[i]); if (!cs.length || !cs.every(isSolid)) return i; }
-  return LEVELS.length;
-}
-
-// ---------- Scheduler (SM-2 style, the logic behind Anki) ----------
-// grade: 0 Again, 1 Hard, 2 Good, 3 Easy. Returns the next gap in days and the new ease.
-function elapsedDays(s) { return s.introduced && s.reps ? Math.max(0, Math.round((dayStart() - (s.due - s.interval * DAY)) / DAY)) : 0; }
-// Every button always gives a different gap, from shortest to longest:
-//   Again → again in a few cards, then tomorrow
-//   first time: Hard 1 day · Good 2 days · Easy 4 days
-//   after that: Hard ≈ gap × 1.2 · Good ≈ gap × ease (about 2.3) · Easy ≈ gap × ease × 1.3, each at least one day more than the one before
-function nextState(s, grade, elapsed = s.interval) {
-  let { interval, ease, reps, lapses } = s;
-  if (grade === 0) return { interval: 1, ease: Math.max(1.3, ease - 0.2), reps: 0, lapses: lapses + 1 };
-  const late = Math.max(0, elapsed - interval);
-  let hard, good, easy;
-  if (reps === 0) [hard, good, easy] = [1, 2, 4];
-  else {
-    hard = Math.max(interval + 1, Math.round(interval * 1.2));
-    good = Math.max(hard + 1, Math.round((interval + late / 2) * ease));
-    easy = Math.max(good + 1, Math.round((interval + late) * ease * 1.3));
-  }
-  if (grade === 1) ease -= 0.15;
-  if (grade === 3) ease += 0.15;
-  return { interval: [0, hard, good, easy][grade], ease: Math.max(1.3, Math.round(ease * 100) / 100), reps: reps + 1, lapses };
-}
-const fmtDays = d => d === 1 ? "tomorrow" : d < 30 ? `in ${d} days` : d < 365 ? `in ${Math.round(d / 30)} months` : `in ${(d / 365).toFixed(1)} years`;
-const short = d => d < 30 ? d + "d" : d < 365 ? Math.round(d / 30) + "mo" : (d / 365).toFixed(1) + "y";
-const gapLabel = (g, d) => g === 0 ? "now" : short(d);
-
-// ---------- Queue ----------
-let queue = [], current = null, flipped = false, sessionDone = 0, backlog = 0, practice = false, practiceDone = false, practiceKind = "";
-let typed = "", verdict = null, hint = false, gaveUp = false;
-const D = () => S.deck;
-const goalKey = () => D() + "|" + dayKey();
-function doneToday(d = D()) { const s = dayStart(); return new Set(S.log.filter(l => l.t >= s && !l.practice && (l.deck || "expr") === d).map(l => l.id + "|" + (l.dir || "r"))).size; }
-function reviewsToday() { const s = dayStart(); return S.log.filter(l => l.t >= s && !l.wasNew && !l.practice && (l.deck || "expr") === D()).length; }
-function risk(s) { return (dayStart() - s.due) / DAY / Math.max(1, s.interval); } // most at risk first
-function buildQueue(extraNew = 0) {
-  practice = false;
-  const end = dayStart() + DAY, cards = deckCards(D());
-  const due = [];
-  cards.forEach(c => sidesOf(c).forEach(dir => { const s = side(c, dir); if (s.introduced && s.due < end) due.push({ q: c.id + "|" + dir, s }); }));
-  due.sort((a, b) => risk(b.s) - risk(a.s));
-  const room = Math.max(0, S.settings.reviewCap - reviewsToday());
-  backlog = Math.max(0, due.length - room);
-  const reviews = due.slice(0, room).map(x => x.q);
-  const fresh = [];
-  if (!backlog) { // behind on reviews: no new cards until you catch up
-    const k = goalKey(), lv = LEVELS[currentLevel(D())];
-    const roomR = Math.max(0, S.settings.newPerDay + extraNew - (S.intro[k + "|r"] || 0));
-    const roomP = Math.max(0, S.settings.newPerDay + extraNew - (S.intro[k + "|p"] || 0));
-    const pool = lv ? levelCards(D(), lv) : [];
-    const newR = D() === "expr" ? pool.filter(c => !c.introduced).slice(0, roomR).map(c => c.id + "|r") : [];
-    const newP = (D() === "verbs" ? pool : cards).filter(c => unlocked(c) && !c.p.introduced).slice(0, roomP).map(c => c.id + "|p");
-    for (let i = 0; i < Math.max(newR.length, newP.length); i++) { if (newP[i]) fresh.push(newP[i]); if (newR[i]) fresh.push(newR[i]); }
-  }
-  queue = [...reviews, ...fresh];
-  if (!S.goal[goalKey()]) { S.goal[goalKey()] = { target: queue.length + doneToday(), won: false }; save(); }
-}
-function hardest(d = D()) {
-  const out = [];
-  deckCards(d).forEach(c => sidesOf(c).forEach(dir => { const s = side(c, dir); if (s.lapses >= HARD) out.push({ c, dir, s }); }));
-  return out.sort((a, b) => b.s.lapses - a.s.lapses);
-}
-function startPractice() { // replay the hardest cards without changing their schedule
-  queue = hardest().slice(0, 10).map(x => x.c.id + "|" + x.dir);
-  practice = true; practiceKind = "hard"; practiceDone = false; next(); go("review");
-}
-// Keep going after the day is done: replay cards you've already seen, the ones coming back soonest first.
-// It does not move their next review, so the spacing that makes memory stick stays intact.
-function startExtra() {
-  const seen = [];
-  deckCards(D()).forEach(c => sidesOf(c).forEach(dir => { const s = side(c, dir); if (s.introduced) seen.push({ q: c.id + "|" + dir, due: s.due }); }));
-  queue = seen.sort((a, b) => a.due - b.due).slice(0, 20).map(x => x.q);
-  practice = true; practiceKind = "extra"; practiceDone = false; next(); go("review");
-}
-const seenCount = () => deckCards(D()).filter(c => sidesOf(c).some(dir => side(c, dir).introduced)).length;
-function next() { current = queue[0] || null; flipped = false; typed = ""; verdict = null; hint = false; gaveUp = false; }
-
-// Say it cards are graded by the app, not by you:
-// Easy = found alone · Good = found with the hint · Hard = almost (a typo, a missing word) · Again = wrong or "I give up".
-function autoGrade() {
-  if (gaveUp || !verdict || verdict.kind === "wrong") return 0;
-  if (verdict.kind === "almost") return 1;
-  return hint ? 2 : 3;
-}
-const GRADES = [
-  ["Again", "Not found"],
-  ["Hard", "Almost"],
-  ["Good", "Found with the hint"],
-  ["Easy", "Found on your own"],
-];
-
-function grade(g) {
-  if (!current) return;
-  const { c, dir } = parseQ(current);
-  const s = side(c, dir);
-  if (practice) {
-    S.log.push({ t: Date.now(), id: c.id, deck: c.deck, dir, g, practice: true });
-  } else {
-    const fullBefore = isMastered(c);
-    const wasNew = !s.introduced;
-    const elapsed = elapsedDays(s);
-    if (wasNew) { s.introduced = Date.now(); const k = goalKey() + "|" + dir; S.intro[k] = (S.intro[k] || 0) + 1; }
-    const before = s.interval;
-    Object.assign(s, nextState(s, g, elapsed));
-    s.due = dayStart() + s.interval * DAY;
-    S.log.push({ t: Date.now(), id: c.id, deck: c.deck, dir, g, wasNew, before, after: s.interval });
-    if (!fullBefore && isMastered(c)) toast(`Mastered<br><b>${esc(c.en)}</b>`, true);
-    const lvNow = currentLevel(D());
-    if (lvNow > S.level[D()] && LEVELS[lvNow]) { toast(`Level up<br><b>${LEVELS[lvNow]}</b>`, true); confetti(); }
-    S.level[D()] = lvNow;
-    const goal = S.goal[goalKey()];
-    if (goal && !goal.won && doneToday() >= goal.target) { goal.won = true; toast("Daily goal reached<br><b>Day won</b>", true); confetti(); }
-  }
-  queue.shift();
-  if (g === 0) queue.splice(Math.min(3, queue.length), 0, current); // see it again a few cards later
-  if (!queue.length && practice) practiceDone = true;
-  sessionDone++;
-  save(); next(); renderReview();
-}
-
-// ---------- Checking a typed answer ----------
-function norm(t) {
-  return String(t ?? "").toLowerCase().replace(/['’‘]/g, "").replace(/…/g, " ").replace(/&/g, " and ")
-    .replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
-}
+// ============================================================================
+// 4. Typed answers: compare with the back of the card, tolerate one typo.
+// ============================================================================
+const norm = t => String(t ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/['’‘]/g, "").replace(/…/g, " ").replace(/&/g, " and ").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 const core = t => norm(t).replace(/^(to|a|an|the) /, "");
-function accepted(c) {
-  const out = [c.en, ...(c.alts || [])].map(core);
-  const m = c.en.match(/^(.*?)\s*\(([^)]+)\)\s*$/); // "return on investment (ROI)": full form or acronym
-  if (m) out.push(core(m[1]), core(m[2]));
-  return out.filter(Boolean);
-}
+const accepted = c => [...String(c.back).split(/\s*[\/;\n]\s*/), ...(c.alts || [])].map(core).filter(Boolean);
 function lev(a, b) {
   const d = Array.from({ length: b.length + 1 }, (_, j) => j);
-  for (let i = 1; i <= a.length; i++) {
-    let prev = d[0]; d[0] = i;
-    for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = t; }
-  }
+  for (let i = 1; i <= a.length; i++) { let p = d[0]; d[0] = i; for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, p + (a[i - 1] === b[j - 1] ? 0 : 1)); p = t; } }
   return d[b.length];
 }
-function check(answer, c) {
-  const a = core(answer);
-  if (!a) return { kind: "wrong" };
-  const acc = accepted(c);
-  if (acc.includes(a)) return { kind: "exact" };
-  // almost = one typo in a word of 4+ letters, or 80% of the letters right
-  if (acc.some(e => { const d = lev(a, e); return (d === 1 && e.length >= 4) || 1 - d / Math.max(a.length, e.length) >= 0.8; })) return { kind: "almost" };
-  return { kind: "wrong" };
+function check(typed, c) {
+  const a = core(typed), acc = accepted(c);
+  if (!a) return "wrong";
+  if (acc.includes(a)) return "exact";
+  return acc.some(e => { const d = lev(a, e); return (d === 1 && e.length >= 4) || 1 - d / Math.max(a.length, e.length) >= 0.8; }) ? "almost" : "wrong";
 }
-function diff(answer, expected) { // underline the words you missed
-  const got = new Set(norm(answer).split(" "));
-  return expected.split(/(\s+)/).map(w => /^\s+$/.test(w) || !norm(w) || got.has(norm(w)) ? esc(w) : `<mark>${esc(w)}</mark>`).join("");
-}
-const hintOf = t => t.split(" ").map(w => w.replace(/(^[^A-Za-z]*[A-Za-z])|[A-Za-z]/g, (m, first) => first || "_")).join("  ");
+const markMissing = (typed, expected) => { const got = new Set(norm(typed).split(" ")); return expected.split(/(\s+)/).map(w => /^\s+$/.test(w) || !norm(w) || got.has(norm(w)) ? esc(w) : `<mark>${esc(w)}</mark>`).join(""); };
+const hintOf = t => String(t).split(" ").map(w => w.replace(/(^[^\p{L}]*\p{L})|\p{L}/gu, (m, first) => first || "_")).join("  ");
 
-// ---------- Speech ----------
-function speak(text) {
-  try { const u = new SpeechSynthesisUtterance(text.replace("…", "")); u.lang = "en-GB"; u.rate = 0.95; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) {}
-}
-
-// ---------- Effects ----------
-let fxTimer, fxQueue = [];
-function toast(html, big) { fxQueue.push([html, big]); if (fxQueue.length === 1) showFx(); }
-function showFx() {
-  const [html, big] = fxQueue[0]; const t = $("#fx");
-  t.innerHTML = html; t.className = "fx show" + (big ? " big" : "");
-  clearTimeout(fxTimer);
-  fxTimer = setTimeout(() => { t.className = "fx"; fxQueue.shift(); if (fxQueue.length) setTimeout(showFx, 150); }, big ? 2400 : 900);
-}
-function confetti() {
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const box = $("#confetti"), colors = ["#4E5D3A", "#9A7531", "#A6533F", "#4E7A4C", "#E7E6D3"];
-  for (let i = 0; i < 36; i++) {
-    const e = document.createElement("i");
-    e.style.left = Math.random() * 100 + "vw"; e.style.background = colors[i % colors.length];
-    e.style.animationDelay = Math.random() * 0.3 + "s"; e.style.transform = `rotate(${Math.random() * 360}deg)`;
-    box.appendChild(e); setTimeout(() => e.remove(), 2200);
-  }
-}
-
-// ---------- Rendering ----------
+// ============================================================================
+// 5. Screens
+// ============================================================================
 const $ = s => document.querySelector(s);
+const app = $("#app");
 const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+let view = { name: "home" }, ses = null;
+let toastTimer;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 1800); }
+function go(v) { view = v; render(); window.scrollTo(0, 0); }
+// "Tap again to confirm" instead of a browser pop-up
+function armed(btn, label, action) {
+  btn.onclick = () => {
+    if (btn.classList.contains("armed")) return action();
+    btn.classList.add("armed"); const old = btn.textContent; btn.textContent = label;
+    setTimeout(() => { btn.classList.remove("armed"); btn.textContent = old; }, 3000);
+  };
+}
+const header = (title, backTo) => `<div class="top">${backTo ? `<button class="back-btn" id="back" aria-label="Back">‹</button>` : ""}<h1>${esc(title)}</h1></div>`;
+const wireBack = to => { const b = $("#back"); if (b) b.onclick = () => go(to); };
+function nums(n, d) { return `<span class="nums"><span class="${n ? "n-new" : "n-zero"}" title="New">${n}</span><span class="${d ? "n-due" : "n-zero"}" title="To review">${d}</span></span>`; }
 
-function renderDecks() {
-  $("#decks").hidden = Object.keys(DECKS).length < 2; // the switcher only shows when there is a choice
-  $("#decks").innerHTML = Object.entries(DECKS).map(([id, d]) =>
-    `<button type="button" role="tab" data-deck="${id}" aria-selected="${id === D()}">${d.name} <span>${deckCards(id).length}</span></button>`).join("");
-  document.querySelectorAll("[data-deck]").forEach(b => b.onclick = () => {
-    if (b.dataset.deck === D()) return;
-    S.deck = b.dataset.deck; save(); buildQueue(); next(); sessionDone = 0;
-    const tab = $("#view-stats").hidden ? "review" : "stats"; go(tab);
+function render() {
+  document.querySelectorAll("[data-tab]").forEach(b => b.dataset.tab === (view.name === "settings" ? "settings" : "decks") ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
+  ({ home, deck: deckScreen, add, bulk, browse, edit, options, study, settings })[view.name]();
+}
+
+// --- Home: your decks
+function home() {
+  const rows = S.decks.map(d => {
+    const k = counts(d), total = cardsOf(d.id).length;
+    return `<button class="deck-row" data-deck="${d.id}"><span><span class="name">${esc(d.name)}</span><br><span class="sub">${total} card${total === 1 ? "" : "s"}</span></span>${nums(k.fresh.length, k.due.length + k.learning.length)}</button>`;
+  }).join("");
+  app.innerHTML = `${header("Daily Deck")}
+    ${S.decks.length ? `<div class="row small-text muted"><span class="n-new">● New</span><span class="n-due">● To review</span></div><div class="decks">${rows}</div>`
+      : `<div class="panel empty"><div class="big">No deck yet</div><p class="muted" style="margin:0">Create your first deck, then add cards to it.</p></div>`}
+    <div class="panel">
+      <div class="field"><label for="newDeck">New deck</label><input id="newDeck" type="text" placeholder="e.g. Phrasal verbs, Interview English…" autocomplete="off"></div>
+      <button class="primary" id="createDeck">Create deck</button>
+    </div>`;
+  document.querySelectorAll("[data-deck]").forEach(b => b.onclick = () => go({ name: "deck", deck: b.dataset.deck }));
+  const create = () => {
+    const name = $("#newDeck").value.trim(); if (!name) return $("#newDeck").focus();
+    const d = { id: uid(), name, opts: defaultOpts() }; S.decks.push(d); save(); toast("Deck created"); go({ name: "add", deck: d.id });
+  };
+  $("#createDeck").onclick = create;
+  $("#newDeck").onkeydown = e => { if (e.key === "Enter") create(); };
+}
+
+// --- One deck: study, add, browse, options
+const ivlOf = c => c.state === "new" ? 0 : Math.max(0, Math.round((c.due - dayStart(c.last)) / DAY));
+function deckScreen() {
+  const d = deckById(view.deck); if (!d) return go({ name: "home" });
+  const k = counts(d), cs = cardsOf(d.id), todo = k.fresh.length + k.due.length + k.learning.length;
+  const young = cs.filter(c => c.state !== "new" && ivlOf(c) < 21).length, mature = cs.filter(c => c.state === "review" && ivlOf(c) >= 21).length;
+  const tomorrow = cs.filter(c => c.state !== "new" && c.due < dayStart() + 2 * DAY).length;
+  app.innerHTML = `${header(d.name, true)}
+    <div class="panel study-box">
+      <div class="study-nums"><div><b class="n-new">${k.fresh.length}</b><span class="label">New</span></div><div><b class="n-due">${k.due.length + k.learning.length}</b><span class="label">To review</span></div></div>
+      ${todo ? `<button class="primary wide" id="studyBtn">Study now</button>`
+        : `<p style="margin:0"><b>Done for today.</b> <span class="muted">${cs.length ? `${tomorrow} card${tomorrow === 1 ? "" : "s"} to review tomorrow.` : "Add some cards to start."}</span></p>
+           ${k.newLeft ? `<button class="wide" id="moreBtn">Study 10 more new cards</button>` : ""}`}
+    </div>
+    <div class="menu">
+      <button id="addBtn">＋ Add a card</button><button id="bulkBtn">Add many</button>
+      <button id="browseBtn">Browse cards</button><button id="optBtn">Options</button>
+    </div>
+    <div class="panel">
+      <div class="stats"><div><b>${cs.length}</b><span>Cards</span></div><div><b>${cs.length - young - mature}</b><span>New</span></div><div><b>${young}</b><span>Learning</span></div><div><b>${mature}</b><span>Mature</span></div></div>
+      <p class="muted small-text" style="margin:0">Mature = the next review is 3 weeks or more away. Answer mode: <b>${d.opts.mode === "type" ? "type the answer" : "flip the card"}</b>, ${d.opts.newPerDay} new cards a day.</p>
+    </div>`;
+  wireBack({ name: "home" });
+  const sb = $("#studyBtn"); if (sb) sb.onclick = () => startStudy(d);
+  const mb = $("#moreBtn"); if (mb) mb.onclick = () => startStudy(d, 10);
+  $("#addBtn").onclick = () => go({ name: "add", deck: d.id });
+  $("#bulkBtn").onclick = () => go({ name: "bulk", deck: d.id });
+  $("#browseBtn").onclick = () => go({ name: "browse", deck: d.id, q: "" });
+  $("#optBtn").onclick = () => go({ name: "options", deck: d.id });
+}
+
+// --- Add one card
+function add() {
+  const d = deckById(view.deck); if (!d) return go({ name: "home" });
+  app.innerHTML = `${header("Add a card", true)}
+    <p class="muted small-text" style="margin:-8px 0 0">Deck: <b>${esc(d.name)}</b> · <span id="nCards">${cardsOf(d.id).length}</span> cards</p>
+    <div class="panel">
+      <div class="field"><label for="front">Front <span class="help">— the question</span></label><textarea id="front" placeholder="e.g. partir"></textarea></div>
+      <div class="field"><label for="backF">Back <span class="help">— the answer. Several right answers? Separate them with /</span></label><textarea id="backF" placeholder="e.g. to leave"></textarea></div>
+      <div class="field"><label for="extra">Example or note <span class="help">— optional, shown with the answer</span></label><textarea id="extra" placeholder="e.g. I leave work at 6."></textarea></div>
+      <label class="check"><input type="checkbox" id="rev"> Also add the reversed card (back → front)</label>
+      <button class="primary wide" id="saveCard">Add card</button>
+    </div>`;
+  wireBack({ name: "deck", deck: d.id });
+  $("#front").focus();
+  $("#saveCard").onclick = () => {
+    const f = $("#front").value.trim(), b = $("#backF").value.trim(), x = $("#extra").value.trim();
+    if (!f || !b) return toast("Fill in the front and the back.");
+    S.cards.push(newCard(d.id, f, b, x));
+    if ($("#rev").checked) S.cards.push(newCard(d.id, b, f, x));
+    save(); toast($("#rev").checked ? "2 cards added" : "Card added");
+    $("#front").value = $("#backF").value = $("#extra").value = ""; $("#front").focus();
+    $("#nCards").textContent = cardsOf(d.id).length;
+  };
+}
+
+// --- Add many at once: one card per line, "front ; back" (or pasted from a spreadsheet)
+function parseLines(text) {
+  return text.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
+    const parts = l.includes("\t") ? l.split("\t") : l.split(/\s*;\s*/);
+    return parts.length >= 2 && parts[0] && parts[1] ? { front: parts[0].trim(), back: parts[1].trim(), extra: (parts[2] || "").trim() } : null;
   });
 }
-function where() {
-  const i = currentLevel(D());
-  return LEVELS[i] ? `Level ${i + 1} · <b>${LEVELS[i]}</b>` : "All levels closed";
-}
-function renderStrip() {
-  const g = S.goal[goalKey()], d = doneToday(), target = g ? g.target : 0, won = g && g.won;
-  const pct = target ? Math.min(1, d / target) : (d ? 1 : 0);
-  $("#strip").innerHTML = `
-    <div class="goal ${won ? "won" : ""}">
-      <div class="goal-top"><span class="label">${won ? "Day won" : "Today's goal"}</span>
-        <span class="goal-n"><b>${Math.min(d, target)}</b> / ${target} cards${d > target ? ` <span class="bonus">+${d - target} extra</span>` : ""}</span></div>
-      <div class="bar goalbar"><i style="width:${pct * 100}%"></i></div>
-    </div>
-    <p class="muted goal-note">${where()} · Goal = cards due today + ${S.settings.newPerDay} new.${won ? " Anything more is extra." : ""}</p>`;
-}
-function checkUrl(c) {
-  const q = c.en.replace(/\s*\([^)]*\)/g, "").replace(/…/g, "").replace(/[,.?!]+$/g, "").trim();
-  return "https://context.reverso.net/traduction/anglais-francais/" + encodeURIComponent(q).replace(/%20/g, "+");
-}
-function tools(c) {
-  return `<div class="tools"><a href="${checkUrl(c)}" target="_blank" rel="noopener">Check in real sentences ↗</a>
-    <button class="link" id="flag" type="button">${S.flags[c.id] ? "Flagged ✓" : "Flag as doubtful"}</button></div>`;
-}
-function renderCounts() {
-  renderDecks(); renderStrip();
-  if (practice) { $("#counts").innerHTML = `<span>Practice <b>${queue.length}</b></span>`; return; }
-  const newLeft = queue.filter(q => { const { c, dir } = parseQ(q); return !side(c, dir).introduced; }).length;
-  $("#counts").innerHTML = `<span>New <b>${newLeft}</b></span><span>Review <b>${queue.length - newLeft}</b></span>`;
-}
-function newLeftInLevel() { const lv = LEVELS[currentLevel(D())]; return lv ? levelCards(D(), lv).filter(c => D() === "verbs" ? !c.p.introduced : !c.introduced).length : 0; }
-
-function renderDone(v) {
-  if (practiceDone) {
-    practice = false; practiceDone = false;
-    v.innerHTML = `<div class="panel done"><div class="big">Practice done</div>
-      <p class="muted" style="margin:0">Your schedule did not change. These cards still come back on their usual day.</p>
-      <div class="row" style="justify-content:center"><button class="small" id="backReview">Back to today's review</button></div></div>`;
-    $("#backReview").onclick = () => { buildQueue(); next(); renderReview(); };
-    return;
-  }
-  const end2 = dayStart() + 2 * DAY;
-  const tomorrow = deckCards(D()).reduce((n, c) => n + sidesOf(c).filter(dir => { const s = side(c, dir); return s.introduced && s.due < end2; }).length, 0);
-  const g = S.goal[goalKey()], won = g && g.won;
-  const t0 = dayStart(), today = S.log.filter(l => l.t >= t0 && !l.practice && (l.deck || "expr") === D());
-  const lv = LEVELS[currentLevel(D())];
-  const canMore = !backlog && newLeftInLevel();
-  v.innerHTML = `<div class="panel done ${won ? "won" : ""}">
-    <div class="big">${won ? "Day won" : "All clear"}</div>
-    <p class="muted" style="margin:0">${won ? "You did every card planned for today." : "Nothing left to review right now."}</p>
-    <div class="tiles recap">
-      <div class="tile"><span class="v">${doneToday()}</span><span class="label">cards today</span></div>
-      <div class="tile"><span class="v">${today.filter(l => l.wasNew).length}</span><span class="label">new</span></div>
-      <div class="tile"><span class="v">${deckCards(D()).filter(isMastered).length}</span><span class="label">mastered</span></div>
-    </div>
-    <p class="muted" style="margin:0;font-size:.9rem">${tomorrow} card${tomorrow === 1 ? "" : "s"} due tomorrow.</p>
-    ${backlog ? `<p class="muted" style="margin:0">${backlog} older review${backlog > 1 ? "s" : ""} will wait for tomorrow, so the daily load stays light.</p>` : ""}
-    ${canMore ? `<button class="primary" id="moreNew" type="button">10 more new cards</button>` : ""}
-    ${seenCount() ? `<button class="small" id="extraBtn" type="button">Keep reviewing cards I've seen</button>
-      <p class="muted" style="margin:0;font-size:.82rem">Up to 20 cards, soonest first. Extra practice: it does not change when they come back.</p>` : ""}
-    ${canMore ? "" :
-      !backlog ? `<p class="muted" style="margin:0;font-size:.9rem">${lv && levelCards(D(), lv).length ? `Every card of ${lv} is started. The level closes when each card is solid (next review a week or more away).` : "The next level's cards are being written."}</p>` : ""}
-  </div>`;
-  if ($("#moreNew")) $("#moreNew").onclick = () => { buildQueue(10); next(); renderReview(); };
-  if ($("#extraBtn")) $("#extraBtn").onclick = startExtra;
-}
-
-// What the question looks like, per kind of card
-// Shown after the answer, so you learn when each form is used
-const FORM_HELP = {
-  "Simple past": "Simple past · prétérit <span>— used alone, often with a past time: yesterday, last week, in 2019</span>",
-  "Past participle": "Past participle · participe passé <span>— never alone: after have / has / had, or after be (is, was, been)</span>",
-};
-const blanked = t => esc(t).replace("___", '<span class="blank">_____</span>');
-function front(c, faded) {
-  const f = faded ? " muted-front" : "";
-  if (c.kind === "Sentence") return `<div class="front sentence${f}">${blanked(c.fr)}</div>`;
-  if (c.kind) return `<div class="fr-line${f}">${esc(c.trans)}</div><div class="front sentence${f}">${blanked(c.fr)}</div>`; // irregular forms: French first
-  return `<div class="front fr-front${f}">${esc(c.fr)}</div>`;
-}
-function renderReview() {
-  renderCounts();
-  const v = $("#view-review");
-  if (!current) return renderDone(v);
-  const { c, dir } = parseQ(current);
-  const s = side(c, dir), say = dir === "p";
-  const notes = [];
-  if (backlog && !practice && reviewsToday() === 0) notes.push(`You were away for a bit. Today is capped at ${S.settings.reviewCap} reviews, most urgent first; new cards are paused until you catch up.`);
-  if (practice) notes.push(practiceKind === "extra" ? "Extra practice on cards you've seen. It does not change your schedule." : "Practice: your hardest cards. It does not change your schedule.");
-  const status = !s.introduced ? "new" : s.interval >= MASTERED ? "mastered" : "learning";
-  const label = c.deck === "verbs" ? KIND_LABEL[c.kind || ""] : `${esc(c.tag)} · ${say ? "Say it" : "Understand it"}`;
-  let body, actions;
-
-  if (!say) { // Expressions, English shown: you grade yourself
-    const previews = [0, 1, 2, 3].map(g => short(nextState(s, g, elapsedDays(s)).interval));
-    body = `<div class="front">${esc(c.en)}</div>
-      <button class="small listen" id="listen" type="button">Listen</button>
-      ${flipped ? `<div class="back"><div class="fr">${esc(c.fr)}</div>${c.ex ? `<div class="ex">“${esc(c.ex)}”</div>` : ""}${tools(c)}</div>`
-        : `<div class="spacer"></div><p class="muted" style="margin:0;font-size:.9rem">Say what it means, then check.</p>`}`;
-    actions = flipped ? `<div class="grades">${GRADES.map(([n], g) => `<button class="g${g}" data-g="${g}">${n}<small>${practice ? "" : gapLabel(g, nextState(s, g, elapsedDays(s)).interval)}</small></button>`).join("")}</div>`
-      : `<button class="primary show" id="showBtn">Show answer</button>`;
-  } else if (!flipped) { // French shown: type the English
-    body = `${front(c)}
-      ${hint ? `${c.kind === "Sentence" ? `<div class="trans">${esc(c.trans)}</div>` : ""}<div class="hint" aria-label="Hint">${esc(hintOf(c.en))}</div>` : ""}
-      <div class="spacer"></div>
-      <div class="answer">
-        <label for="ans" class="sr">Your answer in English</label>
-        <input id="ans" type="text" placeholder="Type it in English" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" value="${esc(typed)}">
-        <div class="row">${hint ? `<span class="muted" style="font-size:.85rem">Hint used: Good at best.</span>` : `<button class="small" id="hintBtn" type="button">Hint</button>`}</div>
-      </div>`;
-    actions = `<div class="pair"><button class="giveup" id="giveUp" type="button">I give up</button><button class="primary show" id="showBtn">Check</button></div>`;
-  } else { // result, graded by the app
-    const g = autoGrade(), [gName, gWhy] = GRADES[g];
-    const previews = [0, 1, 2, 3].map(x => short(nextState(s, x, elapsedDays(s)).interval));
-    const others = (c.alts || []).length ? `<div class="muted alts">Also accepted: ${c.alts.map(esc).join(", ")}</div>` : "";
-    body = `${front(c, true)}
-      <div class="back">
-        <div class="verdict g${g}">${gWhy} · suggested: <b>${gName}</b></div>
-        ${FORM_HELP[c.kind] ? `<div class="form">${FORM_HELP[c.kind]}</div>` : ""}
-        ${typed.trim() && !gaveUp ? `<div class="yours"><span class="label">You typed</span> ${esc(typed)}</div>` : ""}
-        <div class="en-ans">${typed.trim() && !gaveUp ? diff(typed, c.en) : esc(c.en)}</div>
-        ${others}
-        ${c.ex ? `<div class="ex">“${esc(c.ex)}”</div>` : ""}${c.kind === "Sentence" ? `<div class="muted trans-back">${esc(c.trans)}</div>` : ""}
-        <button class="small listen" id="listen" type="button">Listen</button>
-        ${tools(c)}
-      </div>`;
-    actions = `<div class="grades">${GRADES.map(([n], x) => `<button class="g${x}${x === g ? " suggest" : ""}" data-g="${x}">${n}<small>${practice ? "" : gapLabel(x, nextState(s, x, elapsedDays(s)).interval)}</small></button>`).join("")}</div>`;
-  }
-
-  v.innerHTML = notes.map(n => `<div class="notice" role="status">${n}</div>`).join("") +
-    `<article class="card ${flipped ? "flip" : ""}" aria-live="polite">
-      <div class="meta"><span class="tag">${label}</span><span class="state">${esc(c.level)} · ${status}</span></div>
-      ${body}
-    </article>${actions}`;
-
-  const L = $("#listen"); if (L) L.onclick = () => speak(c.kind ? c.ex : c.en);
-  const F = $("#flag"); if (F) F.onclick = () => { S.flags[c.id] ? delete S.flags[c.id] : (S.flags[c.id] = Date.now()); save(); F.textContent = S.flags[c.id] ? "Flagged ✓" : "Flag as doubtful"; };
-  if (!say) {
-    if (flipped) v.querySelectorAll("[data-g]").forEach(b => b.onclick = () => grade(+b.dataset.g));
-    else $("#showBtn").onclick = () => { flipped = true; renderReview(); };
-    return;
-  }
-  if (flipped) { v.querySelectorAll("[data-g]").forEach(b => b.onclick = () => grade(+b.dataset.g)); return; }
-  const ans = $("#ans");
-  const reveal = () => { typed = ans.value; verdict = check(typed, c); flipped = true; renderReview(); };
-  $("#showBtn").onclick = reveal;
-  $("#giveUp").onclick = () => { typed = ans.value; gaveUp = true; flipped = true; renderReview(); };
-  ans.oninput = () => { typed = ans.value; };
-  ans.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); reveal(); } };
-  const h = $("#hintBtn"); if (h) h.onclick = () => { typed = ans.value; hint = true; renderReview(); };
-  if (matchMedia("(pointer: fine)").matches) ans.focus();
-}
-
-function renderStats() {
-  const v = $("#view-stats"), d = D(), cards = deckCards(d);
-  const li = currentLevel(d), lv = LEVELS[li];
-  const lvCards = lv ? levelCards(d, lv) : [], lvSolid = lvCards.filter(isSolid).length;
-  const mastered = cards.filter(isMastered).length;
-  const ladder = LEVELS.map((name, i) => {
-    const n = levelCards(d, name).length;
-    return `<li class="${i < li ? "past" : i === li ? "now" : ""}"><span>${i + 1}. ${name}</span><span class="muted">${n ? n + " cards" : "soon"}${i < li ? " · closed" : ""}</span></li>`;
-  }).join("");
-  // last 14 days
-  const bars = [];
-  for (let i = 13; i >= 0; i--) { const s = dayStart() - i * DAY; bars.push({ s, n: S.log.filter(l => l.t >= s && l.t < s + DAY && (l.deck || "expr") === d).length }); }
-  const top = Math.ceil(Math.max(10, ...bars.map(b => b.n)) / 10) * 10;
-  const W = 320, H = 110, pad = 18, bw = (W - pad) / 14;
-  const svg = `<svg viewBox="0 0 ${W} ${H + 18}" role="img" aria-label="Cards reviewed per day over the last 14 days">
-    <line x1="${pad}" x2="${W}" y1="${H}" y2="${H}" stroke="var(--line)"/>
-    <text x="0" y="8">${top}</text><text x="0" y="${H}">0</text>
-    ${bars.map((b, i) => { const h = b.n ? Math.max(2, (b.n / top) * (H - 4)) : 0; const x = pad + i * bw + 2;
-      return `<rect x="${x}" y="${H - h}" width="${bw - 4}" height="${h}" rx="2" fill="${i === 13 ? "var(--accent)" : "var(--accent-soft)"}"/>` +
-        (i % 2 === 1 ? `<text x="${x + (bw - 4) / 2}" y="${H + 13}" text-anchor="middle">${new Date(b.s).getDate()}</text>` : ""); }).join("")}
-  </svg>`;
-  const hard = hardest(d).slice(0, 10);
-  const flagged = Object.keys(S.flags).map(byId).filter(c => c && c.deck === d);
-  v.innerHTML = `
-  <div class="panel kpi">
-    <span class="label">${DECKS[d].name} · level ${Math.min(li + 1, LEVELS.length)} of ${LEVELS.length}</span>
-    <div class="num">${lv || "All levels closed"}</div>
-    ${lv ? `<div class="bar"><i style="width:${lvCards.length ? 100 * lvSolid / lvCards.length : 0}%"></i></div>
-    <span class="muted" style="font-size:.85rem">${lvSolid} / ${lvCards.length} cards solid. A card is solid when its next review is ${solidDays(lv) === 7 ? "a week" : solidDays(lv) + " days"} or more away. When every card of the level is solid, the next level opens.</span>` : ""}
-    <ol class="ladder">${ladder}</ol>
-  </div>
-  <div class="panel kpi">
-    <span class="label">Mastered</span>
-    <div class="num">${mastered} <span>/ ${cards.length} cards</span></div>
-    <div class="bar"><i style="width:${100 * mastered / cards.length}%"></i></div>
-    <span class="muted" style="font-size:.85rem">Mastered = you found it so many times that its next review is 3 weeks or more away. The first ones appear after about a month.</span>
-  </div>
-  <div class="panel">
-    <h2>Hardest cards</h2>
-    <p class="muted" style="margin:0;font-size:.85rem">Your top 10 misses (Again).</p>
-    ${hard.length ? `<ol class="hardlist">${hard.map(x => `<li><span>${esc(x.dir === "p" ? x.c.fr : x.c.en)} <span class="muted">→ ${esc(x.dir === "p" ? x.c.en : x.c.fr)}</span></span><span class="muted">${x.s.lapses}×</span></li>`).join("")}</ol>
-      <button class="primary" id="practiceBtn" type="button">Practice these</button>`
-      : `<p class="muted" style="margin:0">Nothing yet.</p>`}
-  </div>
-  ${flagged.length ? `<div class="panel">
-    <h2>Flagged cards</h2>
-    <p class="muted" style="margin:0;font-size:.85rem">Cards you marked as doubtful. Copy the list and send it to Claude to check.</p>
-    <ol class="hardlist">${flagged.map(c => `<li><span>${esc(c.fr)} <span class="muted">→ ${esc(c.en)}</span></span></li>`).join("")}</ol>
-    <div class="row"><button class="small" id="copyFlags" type="button">Copy the list</button><span class="toast" id="flagToast" role="status"></span></div>
-  </div>` : ""}
-  <div class="panel">
-    <div class="chart"><span class="label">Cards per day</span>${svg}</div>
-  </div>
-  <div class="panel">
-    <h2>Settings</h2>
-    <div class="field"><label for="npd">New cards per day</label><span class="muted help">Sets your daily goal. More = faster progress, but more reviews in the following days.</span>
-      <select id="npd">${[5, 10, 15, 20, 30, 40, 50].map(n => `<option ${n === S.settings.newPerDay ? "selected" : ""}>${n}</option>`).join("")}</select></div>
-    <div class="field"><label for="cap">Maximum reviews per day</label><span class="muted help">A ceiling, so a few missed days never turn into a mountain.</span>
-      <select id="cap">${[40, 60, 80, 120, 200, 300].map(n => `<option ${n === S.settings.reviewCap ? "selected" : ""}>${n}</option>`).join("")}</select></div>
-  </div>`;
-  const pb = $("#practiceBtn"); if (pb) pb.onclick = startPractice;
-  const cf = $("#copyFlags");
-  if (cf) cf.onclick = () => {
-    const txt = "Daily Deck – flagged cards:\n" + flagged.map(c => `- ${c.fr} → ${c.en} (${c.ex})`).join("\n");
-    try { navigator.clipboard.writeText(txt).then(() => $("#flagToast").textContent = "Copied. Paste it to Claude."); } catch (e) { $("#flagToast").textContent = "Copy blocked here."; }
+function bulk() {
+  const d = deckById(view.deck); if (!d) return go({ name: "home" });
+  app.innerHTML = `${header("Add many", true)}
+    <div class="panel">
+      <p style="margin:0">One card per line: <b>front ; back</b>, and optionally <b>; example</b>.</p>
+      <p class="muted small-text" style="margin:0">You can also paste two columns from Excel or Google Sheets. Example:<br><code>partir ; to leave ; I leave at 6.</code><br><code>oublier ; to forget</code></p>
+      <textarea id="lines" class="big" placeholder="partir ; to leave&#10;oublier ; to forget"></textarea>
+      <label class="check"><input type="checkbox" id="rev"> Also add the reversed cards</label>
+      <p class="muted small-text" id="preview" style="margin:0">0 cards ready.</p>
+      <button class="primary wide" id="addAll" disabled>Add cards</button>
+    </div>`;
+  wireBack({ name: "deck", deck: d.id });
+  const upd = () => {
+    const rows = parseLines($("#lines").value), ok = rows.filter(Boolean).length, bad = rows.length - ok;
+    $("#preview").textContent = `${ok} card${ok === 1 ? "" : "s"} ready${bad ? ` · ${bad} line${bad === 1 ? "" : "s"} without “ ; ” will be skipped` : ""}.`;
+    $("#addAll").disabled = !ok; $("#addAll").textContent = ok ? `Add ${ok * ($("#rev").checked ? 2 : 1)} cards` : "Add cards";
   };
-  $("#npd").onchange = e => { S.settings.newPerDay = +e.target.value; save(); buildQueue(); next(); renderStrip(); };
-  $("#cap").onchange = e => { S.settings.reviewCap = +e.target.value; save(); buildQueue(); next(); };
+  $("#lines").oninput = upd; $("#rev").onchange = upd;
+  $("#addAll").onclick = () => {
+    const rows = parseLines($("#lines").value).filter(Boolean), base = Date.now();
+    rows.forEach((r, i) => {
+      S.cards.push(newCard(d.id, r.front, r.back, r.extra, [], base + i));
+      if ($("#rev").checked) S.cards.push(newCard(d.id, r.back, r.front, r.extra, [], base + i + 0.5));
+    });
+    save(); toast(`${rows.length * ($("#rev").checked ? 2 : 1)} cards added`); go({ name: "deck", deck: d.id });
+  };
 }
 
-// ---------- Tabs ----------
-function go(tab) {
-  document.querySelectorAll("[data-view]").forEach(s => s.hidden = s.id !== "view-" + tab);
-  document.querySelectorAll("[data-tab]").forEach(b => b.dataset.tab === tab ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
-  renderDecks(); renderStrip();
-  if (tab === "review") { if (!current && !practiceDone) { buildQueue(); next(); } renderReview(); }
-  if (tab === "stats") renderStats();
-  window.scrollTo(0, 0);
+// --- Browse and search
+function statusOf(c) {
+  if (c.state === "new") return "new";
+  const days = Math.round((c.due - dayStart()) / DAY);
+  return days <= 0 ? "due" : "in " + fmtIvl(days);
 }
-document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => go(b.dataset.tab));
+function browse() {
+  const d = deckById(view.deck); if (!d) return go({ name: "home" });
+  app.innerHTML = `${header("Browse", true)}
+    <input type="search" id="q" placeholder="Search ${cardsOf(d.id).length} cards" value="${esc(view.q || "")}" autocomplete="off">
+    <div class="panel" style="padding:4px 16px"><div class="list" id="list"></div></div>`;
+  wireBack({ name: "deck", deck: d.id });
+  const draw = () => {
+    const q = norm($("#q").value);
+    const items = cardsOf(d.id).filter(c => !q || norm(c.front + " " + c.back).includes(q)).sort((a, b) => a.order - b.order);
+    $("#list").innerHTML = items.length ? items.slice(0, 300).map(c => `<button class="item" data-card="${c.id}"><span class="f">${esc(c.front)}</span><span class="b">${esc(c.back)}</span><span class="s">${statusOf(c)}</span></button>`).join("")
+      + (items.length > 300 ? `<p class="muted small-text">Showing 300 of ${items.length}. Search to narrow down.</p>` : "")
+      : `<p class="muted">No card found.</p>`;
+    document.querySelectorAll("[data-card]").forEach(b => b.onclick = () => go({ name: "edit", deck: d.id, card: b.dataset.card, q: $("#q").value }));
+  };
+  $("#q").oninput = draw; draw();
+}
 
-// Keyboard: space/Enter shows the answer or goes on, 1-4 grade an Expressions card
-document.addEventListener("keydown", e => {
-  if ($("#view-review").hidden || /input|textarea|select/i.test(e.target.tagName)) return;
-  if (e.key === " " || e.key === "Enter") { const b = $(".grades .suggest") || $("#showBtn"); if (b) { e.preventDefault(); b.click(); } }
-  else if (flipped && "1234".includes(e.key) && $("[data-g]")) grade(+e.key - 1);
+// --- Edit one card
+function edit() {
+  const c = cardById(view.card); if (!c) return go({ name: "browse", deck: view.deck });
+  app.innerHTML = `${header("Edit card", true)}
+    <div class="panel">
+      <div class="field"><label for="front">Front</label><textarea id="front">${esc(c.front)}</textarea></div>
+      <div class="field"><label for="backF">Back</label><textarea id="backF">${esc(c.back)}</textarea></div>
+      <div class="field"><label for="extra">Example or note</label><textarea id="extra">${esc(c.extra)}</textarea></div>
+      <p class="muted small-text" style="margin:0">Status: ${statusOf(c)} · reviewed ${c.reps} time${c.reps === 1 ? "" : "s"} · forgotten ${c.lapses} time${c.lapses === 1 ? "" : "s"}. Editing keeps the progress.</p>
+      <button class="primary wide" id="saveEdit">Save</button>
+      <div class="row"><button class="small" id="resetCard">Reset progress</button><button class="small danger" id="delCard">Delete card</button></div>
+    </div>`;
+  const backTo = { name: "browse", deck: view.deck, q: view.q };
+  wireBack(backTo);
+  $("#saveEdit").onclick = () => {
+    const f = $("#front").value.trim(), b = $("#backF").value.trim();
+    if (!f || !b) return toast("Front and back can't be empty.");
+    c.front = f; c.back = b; c.extra = $("#extra").value.trim(); c.alts = []; save(); toast("Saved"); go(backTo);
+  };
+  armed($("#resetCard"), "Tap again to reset", () => { Object.assign(c, { state: "new", due: 0, stab: 0, diff: 0, reps: 0, lapses: 0, last: 0 }); save(); toast("Progress reset"); go(backTo); });
+  armed($("#delCard"), "Tap again to delete", () => { S.cards = S.cards.filter(x => x !== c); save(); toast("Card deleted"); go(backTo); });
+}
+
+// --- Deck options
+function options() {
+  const d = deckById(view.deck); if (!d) return go({ name: "home" });
+  const sel = (id, list, v) => `<select id="${id}">${list.map(n => `<option value="${n}" ${n === v ? "selected" : ""}>${n === 9999 ? "No limit" : n}</option>`).join("")}</select>`;
+  app.innerHTML = `${header("Options", true)}
+    <div class="panel">
+      <div class="field"><label for="dname">Deck name</label><input type="text" id="dname" value="${esc(d.name)}"></div>
+      <div class="field"><label>Answer mode</label>
+        <div class="seg"><button type="button" data-mode="flip" aria-pressed="${d.opts.mode === "flip"}">Flip the card</button><button type="button" data-mode="type" aria-pressed="${d.opts.mode === "type"}">Type the answer</button></div>
+        <span class="help">Flip: you think of the answer, turn the card and grade yourself, like Anki. Type: you type it, the app checks it and suggests a grade.</span></div>
+      <div class="field"><label for="npd">New cards per day</label>${sel("npd", [5, 10, 15, 20, 30, 50, 100], d.opts.newPerDay)}<span class="help">More new cards = faster progress, but more reviews in the following days.</span></div>
+      <div class="field"><label for="mr">Maximum reviews per day</label>${sel("mr", [50, 100, 200, 300, 500, 9999], d.opts.maxReviews)}<span class="help">A ceiling, so a few missed days never turn into a mountain.</span></div>
+      <button class="primary wide" id="saveOpt">Save</button>
+    </div>
+    <div class="panel"><button class="danger" id="delDeck">Delete this deck and its ${cardsOf(d.id).length} cards</button></div>`;
+  wireBack({ name: "deck", deck: d.id });
+  let mode = d.opts.mode;
+  document.querySelectorAll("[data-mode]").forEach(b => b.onclick = () => { mode = b.dataset.mode; document.querySelectorAll("[data-mode]").forEach(x => x.setAttribute("aria-pressed", x === b)); });
+  $("#saveOpt").onclick = () => {
+    d.name = $("#dname").value.trim() || d.name; d.opts = { mode, newPerDay: +$("#npd").value, maxReviews: +$("#mr").value };
+    save(); toast("Options saved"); go({ name: "deck", deck: d.id });
+  };
+  armed($("#delDeck"), "Tap again to delete everything", () => { S.decks = S.decks.filter(x => x !== d); S.cards = S.cards.filter(c => c.deck !== d.id); save(); toast("Deck deleted"); go({ name: "home" }); });
+}
+
+// --- Study: the card turns over
+function startStudy(d, extraNew = 0) {
+  ses = { deck: d.id, queue: buildQueue(d, extraNew), done: 0, flipped: false, typed: "", verdict: "", hint: false };
+  go({ name: "study", deck: d.id });
+}
+function suggestion() { // typed mode only
+  if (ses.verdict === "giveup" || ses.verdict === "wrong") return 1;
+  if (ses.verdict === "almost" || ses.hint) return 2;
+  return 3; // right on your own: Good. Keep Easy for answers that were truly effortless.
+}
+const VERDICT = { exact: "Right", almost: "Almost: one typo or a word missing", wrong: "Not right", giveup: "You gave up" };
+function study() {
+  const d = deckById(ses ? ses.deck : view.deck);
+  if (!d || !ses) return go({ name: "home" });
+  const c = cardById(ses.queue[0]);
+  if (!c) { // session finished
+    const k = counts(d);
+    app.innerHTML = `${header(d.name, true)}
+      <div class="panel empty"><div class="big">Well done</div>
+        <p style="margin:0">${ses.done} card${ses.done === 1 ? "" : "s"} studied. You've finished this deck for now.</p>
+        ${k.newLeft ? `<button class="wide" id="moreBtn">Study 10 more new cards</button>` : ""}
+        <button class="primary wide" id="homeBtn">Back to decks</button></div>`;
+    wireBack({ name: "deck", deck: d.id });
+    const mb = $("#moreBtn"); if (mb) mb.onclick = () => startStudy(d, 10);
+    $("#homeBtn").onclick = () => go({ name: "home" });
+    return;
+  }
+  const typeMode = d.opts.mode === "type";
+  const left = ses.queue.map(cardById).filter(Boolean);
+  const nNew = left.filter(x => x.state === "new").length;
+  const stateTag = c.state === "new" ? "New" : c.state === "learning" ? "Again" : "Review";
+  app.innerHTML = `
+    <div class="study-top"><button class="back-btn" id="back" aria-label="Back">‹</button><span class="muted small-text" style="flex:1">${esc(d.name)}</span>${nums(nNew, left.length - nNew)}</div>
+    <div class="scene enter"><div class="flip" id="flip">
+      <div class="face front"><div class="tag"><span>${stateTag}</span></div>
+        <div class="q">${esc(c.front)}</div>
+        ${typeMode ? `<div class="spacer"></div><div class="answer-box">
+            <input type="text" id="ans" aria-label="Your answer" placeholder="Type your answer" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
+            <div id="hintBox"></div>
+            <button class="small" id="hintBtn" style="align-self:flex-start">Hint</button></div>`
+          : `<div class="spacer"></div><div class="tap">Tap the card to turn it over</div>`}
+      </div>
+      <div class="face back" id="backFace"></div>
+    </div></div>
+    <div id="controls">${typeMode ? `<div class="pair"><button class="giveup" id="giveUp">I give up</button><button class="primary" id="showBtn">Check</button></div>` : `<button class="primary wide" id="showBtn">Show answer</button>`}</div>`;
+  wireBack({ name: "deck", deck: d.id });
+  const reveal = () => {
+    if (ses.flipped) return;
+    ses.flipped = true;
+    if (typeMode && !ses.verdict) { ses.typed = $("#ans").value; ses.verdict = check(ses.typed, c); }
+    const sug = typeMode ? suggestion() : 0;
+    $("#backFace").innerHTML = `<div class="tag"><span>${stateTag}</span></div>
+      <div class="q small-q">${esc(c.front)}</div>
+      ${typeMode ? `<div class="verdict g${sug}">${VERDICT[ses.verdict]}${ses.hint && ses.verdict === "exact" ? " (with the hint)" : ""}</div>${ses.typed.trim() && ses.verdict !== "giveup" ? `<div class="yours">You typed: ${esc(ses.typed)}</div>` : ""}` : ""}
+      <div class="a">${typeMode && ses.typed.trim() && ses.verdict !== "giveup" && ses.verdict !== "exact" ? markMissing(ses.typed, c.back) : esc(c.back)}</div>
+      ${c.extra ? `<div class="x">${esc(c.extra)}</div>` : ""}`;
+    requestAnimationFrame(() => $("#flip").classList.add("turned"));
+    const o = outcomes(c);
+    $("#controls").innerHTML = `<div class="grades">${[1, 2, 3, 4].map(g => `<button class="g-${g}${g === sug ? " suggest" : ""}" data-g="${g}">${["Again", "Hard", "Good", "Easy"][g - 1]}<small>${fmtIvl(o[g].ivl)}</small></button>`).join("")}</div>`;
+    document.querySelectorAll("[data-g]").forEach(b => b.onclick = () => grade(+b.dataset.g));
+  };
+  const grade = g => {
+    answer(c, g); ses.done++;
+    ses.queue.shift();
+    if (g === 1) ses.queue.splice(Math.min(3, ses.queue.length), 0, c.id); // see it again a few cards later
+    Object.assign(ses, { flipped: false, typed: "", verdict: "", hint: false });
+    render();
+  };
+  ses.reveal = reveal; ses.grade = grade;
+  $("#showBtn").onclick = reveal;
+  if (!typeMode) $("#flip").onclick = reveal;
+  else {
+    const ans = $("#ans");
+    ans.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); reveal(); } };
+    $("#giveUp").onclick = () => { ses.typed = ans.value; ses.verdict = "giveup"; reveal(); };
+    $("#hintBtn").onclick = () => { ses.hint = true; $("#hintBox").innerHTML = `<div class="hint">${esc(hintOf(c.back))}</div>`; $("#hintBtn").remove(); ans.focus(); };
+    if (matchMedia("(pointer: fine)").matches) ans.focus();
+  }
+}
+
+// --- Settings: backup
+function settings() {
+  const total = S.cards.length;
+  app.innerHTML = `${header("Settings")}
+    <div class="panel">
+      <h2>Backup</h2>
+      <p style="margin:0">Your decks and progress live in this browser only (${S.decks.length} deck${S.decks.length === 1 ? "" : "s"}, ${total} cards). Download a backup now and then, and before changing phone or clearing your browser.</p>
+      <button class="primary" id="dl">Download a backup</button>
+      <button id="restoreBtn">Restore from a backup file</button>
+      <input type="file" id="file" accept=".json,application/json" hidden>
+      <p class="muted small-text" style="margin:0">Restoring replaces everything in this browser with the content of the file.</p>
+    </div>
+    <div class="panel">
+      <h2>How cards are scheduled</h2>
+      <p class="muted small-text" style="margin:0">Daily Deck uses FSRS, the same scheduler as recent versions of Anki. It aims for a 90% chance that you still remember a card when it comes back: cards you know well come back after longer and longer gaps, cards you forget come back sooner.</p>
+    </div>`;
+  $("#dl").onclick = () => {
+    try {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(S)], { type: "application/json" }));
+      a.download = `daily-deck-backup-${dayKey()}.json`; document.body.appendChild(a); a.click(); a.remove();
+      toast("Backup downloaded");
+    } catch (e) { toast("Download blocked by this browser."); }
+  };
+  $("#restoreBtn").onclick = () => $("#file").click();
+  $("#file").onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      const data = JSON.parse(await f.text());
+      if (!Array.isArray(data.decks) || !Array.isArray(data.cards)) throw 0;
+      S = data; S.log = S.log || []; S.intro = S.intro || {}; save(); toast("Backup restored"); go({ name: "home" });
+    } catch (err) { toast("This file is not a Daily Deck backup."); }
+  };
+}
+
+// ============================================================================
+// 6. Start
+// ============================================================================
+document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => go({ name: b.dataset.tab === "settings" ? "settings" : "home" }));
+document.addEventListener("keydown", e => { // keyboard: space/enter turns the card, 1–4 grade it
+  if (e.defaultPrevented || view.name !== "study" || !ses || /input|textarea|select/i.test(e.target.tagName)) return; // the answer box handles its own Enter
+  if (!ses.flipped && (e.key === " " || e.key === "Enter")) { e.preventDefault(); ses.reveal && ses.reveal(); }
+  else if (ses.flipped && "1234".includes(e.key)) ses.grade(+e.key);
+  else if (ses.flipped && (e.key === " " || e.key === "Enter")) { e.preventDefault(); const s = document.querySelector(".grades .suggest") || document.querySelector(".g-3"); s && s.click(); }
 });
-
-load(); buildQueue(); next(); renderReview();
+load();
+render();
