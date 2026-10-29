@@ -152,8 +152,9 @@ function syncText() {
   if (!window.cloud.user) return `<button class="link" data-go-settings>☁ Sign in to sync your devices</button>`;
   return { off: "☁ Signed in", syncing: "☁ Syncing…", ok: "☁ Synced", error: "☁ Sync failed, retrying soon", choice: "☁ Choose which data to keep (Settings)" }[sync.state] || "☁";
 }
-window.addEventListener("cloud-ready", () => { syncBadge(); if (view.name === "settings") render(); });
+window.addEventListener("cloud-ready", () => { syncBadge(); if (view.name === "settings" || view.name === "welcome") render(); });
 window.addEventListener("cloud-auth", () => {
+  if (cloudOn() && view.name === "welcome") { S.welcomed = true; saveLocal(); document.querySelector("nav.tabs").hidden = false; view = { name: "home" }; render(); }
   if (cloudOn()) syncNow(true); else { sync.state = "off"; }
   syncBadge(); if (view.name === "settings") render();
 });
@@ -239,7 +240,30 @@ function nums(n, d) { return `<span class="nums"><span class="${n ? "n-new" : "n
 
 function render() {
   document.querySelectorAll("[data-tab]").forEach(b => b.dataset.tab === (view.name === "settings" ? "settings" : "decks") ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
-  ({ home, deck: deckScreen, add, bulk, browse, edit, options, study, settings })[view.name]();
+  ({ welcome, home, deck: deckScreen, add, bulk, browse, edit, options, study, settings })[view.name]();
+}
+
+// --- First open: sign in with Google, or continue without an account
+function welcome() {
+  const ready = !!window.cloud;
+  app.innerHTML = `<div class="welcome">
+      <img src="icons/icon-192.png" alt="" width="96" height="96">
+      <h1>Hfad</h1>
+      <p class="tagline">Learn anything by heart, with your own cards.</p>
+      <div class="panel">
+        <p style="margin:0">Sign in to keep your decks and progress safe and the same on all your devices.</p>
+        <button class="primary wide" id="gSign" ${ready ? "" : "disabled"}>${ready ? "Continue with Google" : "Loading…"}</button>
+        <button class="link" id="skip">Use without an account</button>
+        <p class="muted small-text" style="margin:0">Without an account, your cards stay on this device only. You can sign in later in Settings.</p>
+      </div>
+    </div>`;
+  document.querySelector("nav.tabs").hidden = true;
+  const done = () => { S.welcomed = true; saveLocal(); document.querySelector("nav.tabs").hidden = false; go({ name: "home" }); };
+  $("#skip").onclick = done;
+  $("#gSign").onclick = async () => {
+    try { await window.cloud.signIn(); if (window.cloud.user) done(); }
+    catch (e) { toast("Sign-in failed: " + (e.code || "try again") + ". You can also sign in later in Settings."); }
+  };
 }
 
 // --- Home: your decks
@@ -538,19 +562,14 @@ function settings() {
       <h2>Account and sync</h2>
       ${account}
     </div>
-    <div class="panel">
-      <h2>This browser</h2>
-      <p style="margin:0">Progress saved here since <b>${new Date(S.since).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</b> · <b>${S.cards.filter(c => c.state !== "new").length}</b> cards already studied.</p>
-      <p class="muted small-text" style="margin:0">If this date is today every time you open the app, this browser is not keeping your progress. Open the app the same way every time, ideally from an icon on your home screen (Safari → Share → Add to Home Screen).</p>
-    </div>
-    <div class="panel">
-      <h2>Backup</h2>
-      <p style="margin:0">Your decks and progress live in this browser only (${S.decks.length} deck${S.decks.length === 1 ? "" : "s"}, ${total} cards). Download a backup now and then, and before changing phone or clearing your browser.</p>
-      <button class="primary" id="dl">Download a backup</button>
+    <details class="panel adv">
+      <summary><b>Advanced: backup file</b> <span class="muted small-text">— optional</span></summary>
+      <p style="margin:0">${cloudOn() ? "You're signed in: your cards are already saved in your Google account. You don't need this." : "Not signed in? Your cards only live on this device. A backup file is a copy you keep yourself, to move your cards to another device or restore them if this one is wiped."}</p>
+      <button id="dl">Download a backup file</button>
       <button id="restoreBtn">Restore from a backup file</button>
       <input type="file" id="file" accept=".json,application/json" hidden>
-      <p class="muted small-text" style="margin:0">Restoring replaces everything in this browser with the content of the file.</p>
-    </div>
+      <p class="muted small-text" style="margin:0">Restoring replaces the cards on this device with the ones in the file. On this device since ${new Date(S.since).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}.</p>
+    </details>
     <div class="panel">
       <h2>How cards are scheduled</h2>
       <p class="muted small-text" style="margin:0">Hfad uses FSRS, the same scheduler as recent versions of Anki. It aims for a 90% chance that you still remember a card when it comes back: cards you know well come back after longer and longer gaps, cards you forget come back sooner.</p>
@@ -602,4 +621,5 @@ const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) navigator.serviceWorker.register("sw.js").catch(() => {});
 
 load();
+if (!S.welcomed) view = { name: "welcome" };
 render();
