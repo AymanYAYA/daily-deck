@@ -89,6 +89,9 @@ function load() {
     save();
   }
   S.log = S.log || []; S.intro = S.intro || {};
+  if (!S.since) { S.since = Date.now(); save(); } // when this browser started keeping your progress
+  // Ask the browser to keep this data instead of clearing it when space runs low.
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
   S.decks.forEach(d => { d.opts = { ...defaultOpts(), ...(d.opts || {}) }; });
 }
 function save() {
@@ -447,6 +450,11 @@ function study() {
 function settings() {
   const total = S.cards.length;
   app.innerHTML = `${header("Settings")}
+    <div class="panel">
+      <h2>This browser</h2>
+      <p style="margin:0">Progress saved here since <b>${new Date(S.since).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</b> · <b>${S.cards.filter(c => c.state !== "new").length}</b> cards already studied.</p>
+      <p class="muted small-text" style="margin:0">If this date is today every time you open the app, this browser is not keeping your progress: open the app the same way each time (see below).</p>
+    </div>
     <div class="panel">
       <h2>Backup</h2>
       <p style="margin:0">Your decks and progress live in this browser only (${S.decks.length} deck${S.decks.length === 1 ? "" : "s"}, ${total} cards). Download a backup now and then, and before changing phone or clearing your browser.</p>
