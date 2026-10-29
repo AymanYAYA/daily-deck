@@ -169,17 +169,19 @@ const cardById = id => S.cards.find(c => c.id === id);
 const cardsOf = id => S.cards.filter(c => c.deck === id);
 const introKey = id => id + "|" + dayKey();
 function reviewsToday(id) { const s = dayStart(); return S.log.filter(l => l.t >= s && l.deck === id && l.was !== "new").length; }
-function counts(deck, extraNew = 0) {
+// "Study 10 more new cards" adds to today's allowance; it can be pressed as many times as you like.
+const extraToday = id => (S.extraNew && S.extraNew[introKey(id)]) || 0;
+function counts(deck) {
   const end = dayStart() + DAY, cs = cardsOf(deck.id);
   const learning = cs.filter(c => c.state === "learning" && c.due < end).sort((a, b) => a.due - b.due);
   const due = cs.filter(c => c.state === "review" && c.due < end).sort((a, b) => a.due - b.due)
     .slice(0, Math.max(0, deck.opts.maxReviews - reviewsToday(deck.id)));
   const fresh = cs.filter(c => c.state === "new").sort((a, b) => a.order - b.order)
-    .slice(0, Math.max(0, deck.opts.newPerDay + extraNew - (S.intro[introKey(deck.id)] || 0)));
+    .slice(0, Math.max(0, deck.opts.newPerDay + extraToday(deck.id) - (S.intro[introKey(deck.id)] || 0)));
   return { learning, due, fresh, newLeft: cs.filter(c => c.state === "new").length };
 }
-function buildQueue(deck, extraNew = 0) {
-  const { learning, due, fresh } = counts(deck, extraNew);
+function buildQueue(deck) {
+  const { learning, due, fresh } = counts(deck);
   const mixed = [], every = fresh.length ? Math.max(1, Math.floor(due.length / fresh.length)) : 0;
   let n = 0;
   due.forEach((c, i) => { mixed.push(c); if (every && (i + 1) % every === 0 && n < fresh.length) mixed.push(fresh[n++]); });
@@ -453,7 +455,8 @@ function options() {
 
 // --- Study: the card turns over
 function startStudy(d, extraNew = 0) {
-  ses = { deck: d.id, queue: buildQueue(d, extraNew), done: 0, flipped: false, typed: "", verdict: "", hint: false };
+  if (extraNew) { S.extraNew = S.extraNew || {}; S.extraNew[introKey(d.id)] = extraToday(d.id) + extraNew; save(); }
+  ses = { deck: d.id, queue: buildQueue(d), done: 0, flipped: false, typed: "", verdict: "", hint: false };
   go({ name: "study", deck: d.id });
 }
 function suggestion() { // typed mode only
