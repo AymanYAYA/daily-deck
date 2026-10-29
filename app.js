@@ -64,6 +64,19 @@ function starterCards(deckId) {
     return c;
   });
 }
+function phrasalCards(deckId) {
+  return PHRASAL.map((r, i) => { const c = newCard(deckId, r[0] + "\n\n" + r[3], r[1], r[3].replace("___", r[1]), r[2] || [], i + 1); c.id = "p" + (i + 1); return c; });
+}
+// Ready-made decks anyone can add in one tap (nothing is imposed except Verbs on a first visit).
+const LIBRARY = [
+  { id: "verbs", name: "Verbs", desc: "364 cards: common English verbs, their irregular forms, then fill-in sentences.", cards: starterCards },
+  { id: "phrasal", name: "Phrasal verbs", desc: "100 cards: the most useful phrasal verbs (give up, figure out, follow up…), French meaning → English, in a sentence.", cards: phrasalCards }
+];
+function addLibraryDeck(id) {
+  const L = LIBRARY.find(x => x.id === id); if (!L || S.decks.some(d => d.id === id)) return;
+  S.cards = S.cards.filter(c => c.deck !== id).concat(L.cards(id));
+  S.decks.push({ id, name: L.name, opts: { ...defaultOpts(), mode: "type" } }); save();
+}
 function freshState() {
   const deck = { id: "verbs", name: "Verbs", opts: { ...defaultOpts(), mode: "type" } };
   return { v: 2, decks: [deck], cards: starterCards(deck.id), log: [], intro: {} };
@@ -94,6 +107,7 @@ function load() {
   // Ask the browser to keep this data instead of clearing it when space runs low.
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
   S.decks.forEach(d => { d.opts = { ...defaultOpts(), ...(d.opts || {}) }; });
+  trimExtras();
 }
 // Every change: keep it in this browser, then send it to the cloud a moment later if signed in.
 function save() { S.updated = Date.now(); saveLocal(); schedulePush(); }
@@ -171,6 +185,15 @@ const cardsOf = id => S.cards.filter(c => c.deck === id);
 const introKey = id => id + "|" + dayKey();
 function reviewsToday(id) { const s = dayStart(); return S.log.filter(l => l.t >= s && l.deck === id && l.was !== "new").length; }
 // "Study 10 more new cards" adds to today's allowance; it can be pressed as many times as you like.
+// When a session ends, extra new cards you didn't use are dropped, so "New" never shows leftovers as homework.
+function trimExtras() {
+  if (!S.extraNew) return; const today = dayKey();
+  for (const k in S.extraNew) {
+    const [id, day] = k.split("|"), d = deckById(id);
+    const used = d && day === today ? (S.intro[k] || 0) - d.opts.newPerDay : 0;
+    if (used > 0) S.extraNew[k] = used; else delete S.extraNew[k];
+  }
+}
 const extraToday = id => (S.extraNew && S.extraNew[introKey(id)]) || 0;
 function counts(deck) {
   const end = dayStart() + DAY, cs = cardsOf(deck.id);
@@ -244,7 +267,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": 
 let view = { name: "home" }, ses = null;
 let toastTimer;
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 1800); }
-function go(v) { view = v; render(); window.scrollTo(0, 0); }
+function go(v) { if (view.name === "study" && v.name !== "study") { trimExtras(); saveLocal(); } view = v; render(); window.scrollTo(0, 0); }
 // "Tap again to confirm" instead of a browser pop-up
 function armed(btn, label, action) {
   btn.onclick = () => {
@@ -357,6 +380,7 @@ function welcome() {
 
 // --- Home: your decks
 function home() {
+  const lib = LIBRARY.filter(L => !S.decks.some(d => d.id === L.id));
   const rows = S.decks.map(d => {
     const k = counts(d), total = cardsOf(d.id).length;
     return `<button class="deck-row" data-deck="${d.id}"><span><span class="name">${esc(d.name)}</span><br><span class="sub">${total} card${total === 1 ? "" : "s"}</span></span>${nums(k.fresh.length, k.due.length + k.learning.length)}</button>`;
@@ -368,7 +392,9 @@ function home() {
     <div class="panel">
       <div class="field"><label for="newDeck">New deck</label><input id="newDeck" type="text" placeholder="e.g. Phrasal verbs, Interview English…" autocomplete="off"></div>
       <button class="primary" id="createDeck">Create deck</button>
-    </div>`;
+    </div>
+    ${lib.length ? `<div class="panel"><h2>Ready-made decks</h2>${lib.map(L => `<div class="lib"><div><b>${esc(L.name)}</b><p class="muted small-text" style="margin:2px 0 0">${esc(L.desc)}</p></div><button data-lib="${L.id}">Add</button></div>`).join("")}</div>` : ""}`;
+  document.querySelectorAll("[data-lib]").forEach(b => b.onclick = () => { addLibraryDeck(b.dataset.lib); toast("Deck added"); go({ name: "deck", deck: b.dataset.lib }); });
   document.querySelectorAll("[data-deck]").forEach(b => b.onclick = () => go({ name: "deck", deck: b.dataset.deck }));
   const create = () => {
     const name = $("#newDeck").value.trim(); if (!name) return $("#newDeck").focus();

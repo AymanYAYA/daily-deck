@@ -2,8 +2,8 @@
 // App files: network first (so updates arrive right away), saved copy when offline.
 // Fonts and the Firebase library: saved copy first, refreshed in the background.
 // Sign-in and database calls are never cached: they always go to the network.
-const CACHE = "hfad-v5";
-const APP = ["./", "index.html", "app.js", "decks.js", "cloud.js", "manifest.webmanifest",
+const CACHE = "hfad-v6";
+const APP = ["./", "index.html", "app.js", "decks.js", "phrasal.js", "cloud.js", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png", "icons/favicon.png"];
 
 self.addEventListener("install", e => {
