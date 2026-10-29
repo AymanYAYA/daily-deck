@@ -18,6 +18,8 @@ Anki is the reference for spaced repetition, but it is powerful and austere: man
 
 **FSRS scheduler (FSRS-5, default parameters).** Each card has a *stability* (how many days until the chance of remembering it drops to 90%) and a *difficulty*. After each answer (Again / Hard / Good / Easy) both are updated and the next review is set when recall should still be about 90%. Again brings the card back a few cards later in the same session. Example with Good every time: 3, 11, 35, 101 days.
 
+**Statistics.** A Stats tab shows a calendar of the days you studied (last 18 weeks) with your streak, the cards coming back in the next 7 and 30 days, the share of reviewed cards you remembered over 30 days compared with FSRS's 90% target (with advice on your pace), and how mature each deck is. A one-line summary per day is synced with the account, so statistics match on every device.
+
 **Daily limits per deck**: new cards per day and maximum reviews per day, so missed days never turn into a mountain.
 
 **Sync across devices.** Sign in with Google and your decks and progress are saved in your account (Firebase Authentication + Cloud Firestore), so phone and computer stay in step. The most recent version wins; a device that has never synced asks which data to keep before replacing anything. Firestore security rules let each user read and write only their own document. Without signing in, everything stays on the device.

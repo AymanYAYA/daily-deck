@@ -89,6 +89,7 @@ function load() {
     save();
   }
   S.log = S.log || []; S.intro = S.intro || {};
+  if (!S.daily) { S.daily = {}; S.log.forEach(l => bumpDaily(l.t, l.g, l.was)); } // first time: rebuild from the history kept here
   if (!S.since) { S.since = Date.now(); save(); } // when this browser started keeping your progress
   // Ask the browser to keep this data instead of clearing it when space runs low.
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
@@ -126,7 +127,7 @@ function applyRemote(remote) {
   const r = JSON.parse(remote.state), t0 = dayStart();
   const seen = new Set(), log = [...S.log.filter(l => l.t < t0), ...S.log.filter(l => l.t >= t0), ...(r.log || [])]
     .filter(l => { const k = l.t + "|" + l.card; if (seen.has(k)) return false; seen.add(k); return true; }).sort((a, b) => a.t - b.t);
-  S = { ...r, log, since: S.since, syncedTo: window.cloud.user.uid, updated: remote.updated };
+  S = { ...r, log, daily: mergeDaily(S.daily, r.daily), since: S.since, syncedTo: window.cloud.user.uid, updated: remote.updated };
   S.intro = S.intro || {}; S.decks.forEach(d => { d.opts = { ...defaultOpts(), ...(d.opts || {}) }; });
   saveLocal(); sync.last = Date.now(); sync.state = "ok";
   if (view.name !== "study") render();
@@ -195,7 +196,23 @@ function answer(c, g) {
   if (g === 1) { if (was === "review") c.lapses++; c.state = "learning"; c.due = now; } // comes back a few cards later
   else { c.state = "review"; c.due = dayStart(now) + o.ivl * DAY; }
   S.log.push({ t: now, card: c.id, deck: c.deck, g, was });
+  bumpDaily(now, g, was);
   save();
+}
+// One small summary per day, synced with the account, so statistics are the same on every device.
+// n = cards answered, nw = new cards, rev = review cards, ok = review cards remembered (Hard, Good or Easy)
+function bumpDaily(t, g, was) {
+  S.daily = S.daily || {};
+  const d = S.daily[dayKey(t)] || (S.daily[dayKey(t)] = { n: 0, nw: 0, rev: 0, ok: 0 });
+  d.n++; if (was === "new") d.nw++; else if (was === "review") { d.rev++; if (g > 1) d.ok++; }
+}
+function mergeDaily(a = {}, b = {}) {
+  const out = {};
+  new Set([...Object.keys(a), ...Object.keys(b)]).forEach(k => {
+    const x = a[k] || {}, y = b[k] || {};
+    out[k] = { n: Math.max(x.n || 0, y.n || 0), nw: Math.max(x.nw || 0, y.nw || 0), rev: Math.max(x.rev || 0, y.rev || 0), ok: Math.max(x.ok || 0, y.ok || 0) };
+  });
+  return out;
 }
 
 // ============================================================================
@@ -241,8 +258,78 @@ const wireBack = to => { const b = $("#back"); if (b) b.onclick = () => go(to); 
 function nums(n, d) { return `<span class="nums"><span class="${n ? "n-new" : "n-zero"}" title="New">${n}</span><span class="${d ? "n-due" : "n-zero"}" title="To review">${d}</span></span>`; }
 
 function render() {
-  document.querySelectorAll("[data-tab]").forEach(b => b.dataset.tab === (view.name === "settings" ? "settings" : "decks") ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
-  ({ welcome, home, deck: deckScreen, add, bulk, browse, edit, options, study, settings })[view.name]();
+  document.querySelectorAll("[data-tab]").forEach(b => b.dataset.tab === (["settings", "stats"].includes(view.name) ? view.name : "decks") ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
+  ({ welcome, stats, home, deck: deckScreen, add, bulk, browse, edit, options, study, settings })[view.name]();
+}
+
+// --- Statistics: regularity, what's coming, how well you remember, how mature your decks are
+function stats() {
+  const daily = S.daily || {}, today = dayStart();
+  const did = k => daily[k] && daily[k].n > 0;
+  // streak (today counts once you've studied; yesterday keeps it alive until then)
+  let streak = 0, t = did(dayKey(today)) ? today : today - DAY;
+  while (did(dayKey(t))) { streak++; t -= DAY; }
+  let best = 0, run = 0, prev = null;
+  Object.keys(daily).filter(did).sort().forEach(k => { const d = new Date(k + "T12:00:00").getTime(); run = prev !== null && Math.round((d - prev) / DAY) === 1 ? run + 1 : 1; best = Math.max(best, run); prev = d; });
+  const total = Object.values(daily).reduce((n, d) => n + d.n, 0), daysOn = Object.keys(daily).filter(did).length;
+
+  // calendar: the last 18 weeks, one square per day, Monday first
+  const WEEKS = 18, start = new Date(today); start.setDate(start.getDate() - ((start.getDay() + 6) % 7) - (WEEKS - 1) * 7);
+  const level = n => !n ? 0 : n < 10 ? 1 : n < 30 ? 2 : n < 60 ? 3 : 4;
+  let cells = "";
+  for (let i = 0; i < WEEKS * 7; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    const k = dayKey(d.getTime()), n = (daily[k] && daily[k].n) || 0, future = d.getTime() > today;
+    const label = d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+    cells += future ? `<i class="cell future"></i>` : `<i class="cell l${level(n)}${d.getTime() === today ? " today" : ""}" data-tip="${label}: ${n} card${n === 1 ? "" : "s"}" title="${label}: ${n}"></i>`;
+  }
+
+  // forecast: cards coming back in the next 7 days (anything overdue counts for today)
+  const fc = Array(7).fill(0);
+  S.cards.forEach(c => { if (c.state === "new") return; const i = Math.max(0, Math.round((dayStart(c.due) - today) / DAY)); if (i < 7) fc[i]++; });
+  const month = S.cards.filter(c => c.state !== "new" && dayStart(c.due) - today < 30 * DAY).length;
+  const fmax = Math.max(1, ...fc);
+  const bars = fc.map((n, i) => { const d = new Date(today + i * DAY), lab = i === 0 ? "Today" : i === 1 ? "Tmrw" : d.toLocaleDateString("en-GB", { weekday: "short" });
+    return `<div class="fbar" data-tip="${i === 0 ? "Today" : d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}: ${n} card${n === 1 ? "" : "s"}"><span class="fval">${n || ""}</span><i style="height:${n ? Math.max(4, 100 * n / fmax) : 0}%"></i><span class="flab">${lab}</span></div>`; }).join("");
+
+  // retention: reviews of the last 30 days that you remembered
+  let rev = 0, ok = 0;
+  for (let i = 0; i < 30; i++) { const d = daily[dayKey(today - i * DAY)]; if (d) { rev += d.rev; ok += d.ok; } }
+  const pct = rev ? Math.round(100 * ok / rev) : null;
+  const advice = pct === null ? "Not enough reviews yet. It shows up once cards start coming back."
+    : pct < 80 ? "Below the 90% target: you may be adding new cards faster than you can keep them. Try fewer new cards per day."
+    : pct > 95 ? "Above the 90% target: your cards are easy for you. You can add more new cards per day."
+    : "Right on target: the pace suits you.";
+
+  // maturity per deck
+  const rows = S.decks.map(d => {
+    const cs = cardsOf(d.id), nNew = cs.filter(c => c.state === "new").length, mature = cs.filter(c => c.state === "review" && ivlOf(c) >= 21).length, learning = cs.length - nNew - mature;
+    const seg = (n, cls, name) => n ? `<i class="${cls}" style="flex:${n}" data-tip="${esc(d.name)}: ${n} ${name}"></i>` : "";
+    return `<div class="mat"><div class="goal-top"><b>${esc(d.name)}</b><span class="muted small-text">${nNew} new · ${learning} learning · ${mature} mature</span></div>
+      <div class="matbar">${cs.length ? seg(nNew, "m-new", "new") + seg(learning, "m-learn", "learning") + seg(mature, "m-mature", "mature") : '<i class="m-empty" style="flex:1"></i>'}</div></div>`;
+  }).join("");
+
+  app.innerHTML = `${header("Stats")}
+    <div class="panel">
+      <div class="tiles3"><div><b>${streak}</b><span>day streak</span></div><div><b>${best}</b><span>best streak</span></div><div><b>${total}</b><span>cards answered</span></div></div>
+      <div class="heat" aria-label="Days you studied, last 18 weeks">${cells}</div>
+      <div class="heat-legend small-text muted"><span>${daysOn} day${daysOn === 1 ? "" : "s"} studied</span><span>Less <i class="cell l0"></i><i class="cell l1"></i><i class="cell l2"></i><i class="cell l3"></i><i class="cell l4"></i> More</span></div>
+    </div>
+    <div class="panel">
+      <h2>Coming up</h2>
+      <div class="forecast">${bars}</div>
+      <p class="muted small-text" style="margin:0">${month} card${month === 1 ? "" : "s"} to review in the next 30 days.</p>
+    </div>
+    <div class="panel">
+      <h2>Remembered</h2>
+      <div class="hero"><b>${pct === null ? "–" : pct + "%"}</b><span class="muted small-text">of the cards you reviewed in the last 30 days (${ok} / ${rev}). Target: about 90%.</span></div>
+      <p style="margin:0" class="small-text">${advice}</p>
+    </div>
+    <div class="panel">
+      <h2>Decks</h2>
+      <div class="row small-text muted"><span><i class="key m-new"></i> New</span><span><i class="key m-learn"></i> Learning</span><span><i class="key m-mature"></i> Mature (3+ weeks)</span></div>
+      ${rows || '<p class="muted" style="margin:0">No deck yet.</p>'}
+    </div>`;
 }
 
 // --- First open: sign in with Google, or continue without an account
@@ -581,7 +668,8 @@ function settings() {
 // ============================================================================
 // 6. Start
 // ============================================================================
-document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => go({ name: b.dataset.tab === "settings" ? "settings" : "home" }));
+document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => go({ name: b.dataset.tab === "decks" ? "home" : b.dataset.tab }));
+document.addEventListener("click", e => { const t = e.target.closest("[data-tip]"); if (t) toast(t.dataset.tip); }); // tap a square or a bar to read its value
 document.addEventListener("keydown", e => { // keyboard: space/enter turns the card, 1–4 grade it
   if (e.defaultPrevented || view.name !== "study" || !ses || /input|textarea|select/i.test(e.target.tagName)) return; // the answer box handles its own Enter
   if (!ses.flipped && (e.key === " " || e.key === "Enter")) { e.preventDefault(); ses.reveal && ses.reveal(); }
