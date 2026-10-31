@@ -370,3 +370,38 @@ const VERBS = [
 ["He ___ (have) two kids.", "has", [], "Il a deux enfants.", "Consultant", "Sentence"],
 ["My brother ___ (teach) maths.", "teaches", [], "Mon frère enseigne les maths.", "Consultant", "Sentence"],
 ];
+
+// French version of each Intern example (same order as the first 150 rows): shown on the front,
+// so the context tells you which English verb is meant.
+const VERBS_FR = [
+"Je suis content d'être ici.", "J'ai deux frères.", "Qu'est-ce que tu fais ce soir ?", "Qu'est-ce qu'elle a dit ?", "Je vais au travail en bus.",
+"J'ai eu le poste !", "Elle a fait un gâteau pour mon anniversaire.", "Je ne connais pas la réponse.", "Je pense que c'est une bonne idée.", "Prends ton temps.",
+"Je ne vois rien.", "Tu peux venir demain ?", "Je veux apprendre l'anglais.", "Regarde cette photo.", "Je peux utiliser ton téléphone ?",
+"Je ne trouve pas mes clés.", "Donne-moi une minute.", "Dis-moi la vérité.", "Je travaille dans la vente.", "Je t'appelle ce soir.",
+"Essaie encore !", "Je peux poser une question ?", "J'ai besoin d'aide.", "Je me sens fatigué aujourd'hui.", "Il est devenu manager l'an dernier.",
+"Je quitte le travail à 18 h.", "Pose-le sur la table.", "Qu'est-ce que ce mot veut dire ?", "Gardez la monnaie.", "Laisse-moi t'aider.",
+"Le film commence à 20 h.", "Tu as l'air fatigué.", "Tu peux m'aider ?", "On peut parler plus tard ?", "Tourne à gauche à la banque.",
+"La réunion commence à 9 h.", "Montre-moi tes photos.", "Tu as entendu ce bruit ?", "On joue au foot le dimanche.", "Je cours tous les matins.",
+"On a déménagé à Londres l'an dernier.", "J'aime bien cette chanson.", "J'habite à Maurice.", "Je ne te crois pas.", "Tiens mon sac, s'il te plaît.",
+"Prends une veste, il fait froid.", "Qu'est-ce qui s'est passé ?", "Écris ton nom ici.", "Nous fournissons des services cloud.", "Asseyez-vous, je vous en prie.",
+"Levez-vous, s'il vous plaît.", "J'ai perdu mon portefeuille.", "Je vais payer par carte.", "Retrouvons-nous à la gare.", "Le prix comprend le petit-déjeuner.",
+"Continuez, je vous en prie.", "Règle le réveil sur 7 h.", "J'apprends l'anglais.", "J'ai changé d'avis.", "Elle dirige l'équipe commerciale.",
+"Désolé, je ne comprends pas.", "On a regardé un film hier soir.", "Suis-moi.", "Arrête de parler !", "On a créé un nouveau site web.",
+"Tu parles français ?", "Je lis tous les soirs.", "Les téléphones ne sont pas autorisés ici.", "Ajoute un peu de sel.", "J'ai passé deux semaines en Espagne.",
+"Les enfants grandissent si vite.", "Ouvre la fenêtre, s'il te plaît.", "Je vais au travail à pied.", "On a gagné le match !", "Ils m'ont proposé le poste.",
+"Je me souviens de ton visage.", "J'adore cette ville.", "Nous envisageons une nouvelle offre.", "Un message est apparu à l'écran.", "J'ai acheté un nouveau téléphone.",
+"Attends-moi !", "Le dîner est servi à 20 h.", "Ma plante est morte.", "Envoie-moi le fichier.", "Je ne m'attendais pas à ça.",
+"Ils construisent un nouveau pont.", "Reste ici, je reviens.", "Je suis tombé de mon vélo.", "Coupe le pain, s'il te plaît.", "Je n'ai pas réussi à te joindre par téléphone.",
+"On est arrivés en retard.", "Le magasin reste ouvert le dimanche.", "Je suggère une petite pause.", "Levez la main si vous êtes d'accord.", "J'ai réussi mon permis de conduire.",
+"Ils vendent du pain frais.", "Ce travail exige de la patience.", "Signalez tout problème à l'informatique.", "J'ai décidé de rester.", "Tire la porte, ne pousse pas.",
+"Je rends le livre demain.", "Tu peux l'expliquer encore une fois ?", "J'espère que tu vas bien.", "Nous développons des applis mobiles.", "Tu peux porter ce carton ?",
+"J'ai cassé mes lunettes.", "Tu as reçu mon e-mail ?", "Je suis d'accord avec toi.", "Ma famille me soutient.", "Il a frappé fort dans le ballon.",
+"L'usine produit des voitures.", "Allons manger au restaurant ce soir.", "Couvre la poêle.", "J'ai attrapé le dernier train.", "Mon fils adore dessiner.",
+"Choisis un nombre.", "La tempête a provoqué des retards.", "Ne montre pas les gens du doigt.", "Écoute-moi.", "Je me suis rendu compte que j'avais tort.",
+"Ferme la porte, s'il te plaît.", "Le poste implique beaucoup de déplacements.", "Les prix ont augmenté l'an dernier.", "J'ai postulé pour le poste.", "Décris ton travail idéal.",
+"Je vais au travail en voiture.", "J'ai mal dormi cette nuit.", "J'ai fini mon rapport.", "On prévoit un voyage.", "Je me demande pourquoi il est parti.",
+"Je prépare le dîner.", "J'accepte ton offre.", "N'oublie pas tes clés.", "Il ne l'a pas mentionné.", "Je préfère le thé au café.",
+"Vérifie tes e-mails.", "Ne t'inquiète pas.", "Évite le centre-ville à 18 h.", "Compare les deux prix.", "Nous avons réduit nos coûts.",
+"Je veux améliorer mon anglais.", "Partageons l'addition.", "Elle gère une équipe de dix personnes.", "Imagine un monde sans téléphones.", "Profite bien de ton repas !",
+"Discutons-en demain.", "Réponds à la question.", "J'ai raté l'examen.", "Nettoie ta chambre.", "Je cuisine tous les soirs."
+];

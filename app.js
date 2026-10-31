@@ -57,7 +57,7 @@ function newCard(deck, front, back, extra = "", alts = [], order = 0) {
 function starterCards(deckId) {
   return VERBS.map((d, i) => {
     const kind = d[5];
-    const front = kind ? d[3] + "\n\n" + d[0] : d[0];
+    const front = kind ? d[3] + "\n\n" + d[0] : d[0] + (VERBS_FR[i] ? "\n\n" + VERBS_FR[i] : "");
     const extra = kind ? d[0].replace(/___\s*\([^)]*\)/, d[1]) : d[3];
     const c = newCard(deckId, front, d[1], extra, d[2] || [], i + 1);
     c.id = "v" + (i + 1);
@@ -108,6 +108,9 @@ function load() {
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
   S.decks.forEach(d => { d.opts = { ...defaultOpts(), ...(d.opts || {}) }; });
   trimExtras();
+  // Starter verbs saved before the French example existed: add it, unless you edited the card.
+  S.cards.forEach(c => { const m = /^v(\d+)$/.exec(c.id), i = m ? +m[1] - 1 : -1;
+    if (i >= 0 && i < VERBS_FR.length && c.front === VERBS[i][0]) c.front += "\n\n" + VERBS_FR[i]; });
 }
 // Every change: keep it in this browser, then send it to the cloud a moment later if signed in.
 function save() { S.updated = Date.now(); saveLocal(); schedulePush(); }
