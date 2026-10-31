@@ -53,14 +53,17 @@ const defaultOpts = () => ({ newPerDay: 10, maxReviews: 200, mode: "flip" });
 function newCard(deck, front, back, extra = "", alts = [], order = 0) {
   return { id: uid(), deck, front, back, extra, alts, order: order || Date.now(), state: "new", due: 0, stab: 0, diff: 0, reps: 0, lapses: 0, last: 0 };
 }
+// Front, back, example and accepted answers of a starter verb card.
+// Tense cards: French sentence, then the English one where the blank hides the whole verb group, so you pick the tense yourself.
+function verbContent(d, i) {
+  if (d[5] === "Tense") return [d[3] + "\n\n" + d[0] + "   (" + d[6] + ")", d[1], d[0].replace("___", d[1]) + "\n" + d[7], d[2] || []];
+  return [d[0] + (VERBS_FR[i] ? "\n\n" + VERBS_FR[i] : ""), d[1], d[3], d[2] || []];
+}
 // Starter deck built from decks.js (the verbs), so a first visit has something to try.
 function starterCards(deckId) {
   return VERBS.map((d, i) => {
-    const kind = d[5];
-    const front = kind ? d[3] + "\n\n" + d[0] : d[0] + (VERBS_FR[i] ? "\n\n" + VERBS_FR[i] : "");
-    const extra = kind ? d[0].replace(/___\s*\([^)]*\)/, d[1]) : d[3];
-    const c = newCard(deckId, front, d[1], extra, d[2] || [], i + 1);
-    c.id = "v" + (i + 1);
+    const c = newCard(deckId, ...verbContent(d, i), i + 1);
+    c.id = "v" + (i + 1); if (d[5] === "Tense") c.strict = true;
     return c;
   });
 }
@@ -79,7 +82,7 @@ function addLibraryDeck(id) {
 }
 function freshState() {
   const deck = { id: "verbs", name: "Verbs", opts: { ...defaultOpts(), mode: "type" } };
-  return { v: 2, decks: [deck], cards: starterCards(deck.id), log: [], intro: {} };
+  return { v: 2, decks: [deck], cards: starterCards(deck.id), log: [], intro: {}, tenseV: 1 };
 }
 // Older version of the app (one built-in verbs deck, SM-2): keep the verb progress.
 function migrateV1(old) {
@@ -108,9 +111,20 @@ function load() {
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
   S.decks.forEach(d => { d.opts = { ...defaultOpts(), ...(d.opts || {}) }; });
   trimExtras();
-  // Starter verbs saved before the French example existed: add it, unless you edited the card.
+  if (upgradeContent()) save();
+}
+// Starter verb cards saved by an older version get the new content.
+// Level 1: the French example is added (unless you edited the card). Levels 2–3 were rewritten as tense cards: new content, progress reset.
+function upgradeContent() {
+  let changed = false;
   S.cards.forEach(c => { const m = /^v(\d+)$/.exec(c.id), i = m ? +m[1] - 1 : -1;
-    if (i >= 0 && i < VERBS_FR.length && c.front === VERBS[i][0]) c.front += "\n\n" + VERBS_FR[i]; });
+    if (i >= 0 && i < VERBS_FR.length && c.front === VERBS[i][0]) c.front += "\n\n" + VERBS_FR[i];
+    if (!S.tenseV && i >= VERBS_FR.length && i < VERBS.length) {
+      [c.front, c.back, c.extra, c.alts] = verbContent(VERBS[i], i); c.strict = true;
+      Object.assign(c, { state: "new", due: 0, stab: 0, diff: 0, reps: 0, lapses: 0, last: 0 }); changed = true;
+    } });
+  if (!S.tenseV) { S.tenseV = 1; changed = true; }
+  return changed;
 }
 // Every change: keep it in this browser, then send it to the cloud a moment later if signed in.
 function save() { S.updated = Date.now(); saveLocal(); schedulePush(); }
@@ -146,6 +160,7 @@ function applyRemote(remote) {
     .filter(l => { const k = l.t + "|" + l.card; if (seen.has(k)) return false; seen.add(k); return true; }).sort((a, b) => a.t - b.t);
   S = { ...r, log, daily: mergeDaily(S.daily, r.daily), since: S.since, syncedTo: window.cloud.user.uid, updated: remote.updated };
   S.intro = S.intro || {}; S.decks.forEach(d => { d.opts = { ...defaultOpts(), ...(d.opts || {}) }; });
+  if (upgradeContent()) { S.updated = Date.now(); schedulePush(); }
   saveLocal(); sync.last = Date.now(); sync.state = "ok";
   if (view.name !== "study") render();
 }
@@ -244,7 +259,10 @@ function mergeDaily(a = {}, b = {}) {
 // ============================================================================
 // 4. Typed answers: compare with the back of the card, tolerate one typo.
 // ============================================================================
-const norm = t => String(t ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/['’‘]/g, "").replace(/…/g, " ").replace(/&/g, " and ").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+// Contractions count as the full form: "haven't" = "have not", "I'll" = "I will".
+const expand = t => String(t ?? "").toLowerCase().replace(/[’‘]/g, "'").replace(/\bwon'?t\b/g, "will not").replace(/\bcan'?t\b|\bcan not\b/g, "cannot").replace(/\bshan'?t\b/g, "shall not")
+  .replace(/\b(do|does|did|have|has|had|is|are|was|were|could|would|should|must|need)n'?t\b/g, "$1 not").replace(/'ve\b/g, " have").replace(/'ll\b/g, " will").replace(/'re\b/g, " are").replace(/\bi'm\b/g, "i am");
+const norm = t => expand(t).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/['’‘]/g, "").replace(/…/g, " ").replace(/&/g, " and ").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 const core = t => norm(t).replace(/^(to|a|an|the) /, "");
 const accepted = c => [...String(c.back).split(/\s*[\/;\n]\s*/), ...(c.alts || [])].map(core).filter(Boolean);
 function lev(a, b) {
@@ -252,10 +270,15 @@ function lev(a, b) {
   for (let i = 1; i <= a.length; i++) { let p = d[0]; d[0] = i; for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, p + (a[i - 1] === b[j - 1] ? 0 : 1)); p = t; } }
   return d[b.length];
 }
+const grammarEnding = (a, b) => { const [s, l] = a.length < b.length ? [a, b] : [b, a]; return s !== l && l.startsWith(s) && /^(s|es|d|ed|ing)$/.test(l.slice(s.length)); };
 function check(typed, c) {
   const a = core(typed), acc = accepted(c);
   if (!a) return "wrong";
   if (acc.includes(a)) return "exact";
+  // Tense cards: a typo is fine, a wrong tense is not. Same number of words, the first word exact, at most one letter off per word.
+  if (c.strict) return acc.some(e => { const x = a.split(" "), y = e.split(" "); if (x.length !== y.length || x[0] !== y[0] && y.length > 1) return false;
+    if (x.some((w, k) => grammarEnding(w, y[k]))) return false; // "rain" for "rains": a grammar mistake, not a typo
+    const ds = x.map((w, k) => lev(w, y[k])); return ds.every(d => d <= 1) && ds.reduce((p, q) => p + q, 0) <= (y.length > 1 ? 2 : 1) && e.length >= 4; }) ? "almost" : "wrong";
   return acc.some(e => { const d = lev(a, e); return (d === 1 && e.length >= 4) || 1 - d / Math.max(a.length, e.length) >= 0.8; }) ? "almost" : "wrong";
 }
 const markMissing = (typed, expected) => { const got = new Set(norm(typed).split(" ")); return expected.split(/(\s+)/).map(w => /^\s+$/.test(w) || !norm(w) || got.has(norm(w)) ? esc(w) : `<mark>${esc(w)}</mark>`).join(""); };
